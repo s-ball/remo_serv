@@ -20,6 +20,7 @@ class Session(collections.abc.MutableMapping):
         self.timestamp = time.time()
         self.content = {}
         self.key = None
+        self.user = None
 
     def refresh(self):
         self.timestamp = time.time()

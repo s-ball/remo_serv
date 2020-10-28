@@ -1,21 +1,26 @@
 #  Copyright (c) 2020 SBA- MIT License
 
-from cheroot.wsgi import Server  # , PathInfoDispatcher
-import toml
-import logging.config
 import argparse
+import logging.config
 import os.path
 import sys
 
+import toml
+from cheroot.wsgi import Server  # , PathInfoDispatcher
+
+from .crypter import Cryptor
+from .http_tools import build_status
 from .session_manager import SessionContainer
+from .user_service import SqliteUserService
 
 
 def hello_app(environ, start_response):
+    out = b'Hello'
     if environ['PATH_INFO'] == '/stop' and 'SERVER' in environ:
         environ['SERVER'].stop()
     headers = [('Content_type', 'text/plain')]
-    start_response('200 OK', headers)
-    return [b'Hello']
+    start_response(build_status(200), headers)
+    return [out]
 
 
 def parse(args):
@@ -82,7 +87,9 @@ def run(args):
     conf = parse(args)
     config_logging(conf)
     logger = logging.getLogger()
-    session_container = SessionContainer(hello_app, conf['timeout'])
+    user_service = SqliteUserService('user_db.sqlite')
+    crypt = Cryptor(hello_app, 'remo_serv.key', user_service)
+    session_container = SessionContainer(crypt, conf['timeout'])
     logger.info('start')
     server = Server((conf['host'], conf['port']), session_container)
     session_container.server = server

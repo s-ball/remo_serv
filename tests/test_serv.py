@@ -24,7 +24,7 @@ class TestServ(unittest.TestCase):
         serv.hello_app(environ, start_response)
         ok = http.HTTPStatus.OK
         # noinspection PyUnresolvedReferences
-        ok = '{} {}'.format(ok.value, ok.name)
+        ok = '{} {}'.format(ok.value, ok.phrase)
         self.assertEqual(1, len(environ))
         start_response.assert_called_once()
         self.assertEqual(ok, start_response.call_args[0][0])
