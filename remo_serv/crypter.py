@@ -40,7 +40,8 @@ class Cryptor:
             return [b'']
         if path == self.path:
             try:
-                if environ['CONTENT_LENGTH'] == '0':
+                data = environ['wsgi.input'].read()
+                if len(data) == 0 or environ['CONTENT_LENGTH'] == '0':
                     session.key = None
                     start_response(build_status(200),
                                    [('Content-Type', 'text/plain')])
@@ -48,7 +49,7 @@ class Cryptor:
             except LookupError:
                 pass
             try:
-                data = json.load(environ['wsgi.input'])
+                data = json.loads(data)
                 user = data['user']
                 pub = base64.urlsafe_b64decode(data['key'].encode())
                 sign = base64.urlsafe_b64decode(data['sign'].encode())
@@ -89,15 +90,18 @@ class Cryptor:
             return [b'']
         else:
             deco = fernet.Fernet(session.key)
-            if environ.get('CONTENT_LENGTH') != '0':
+            length = environ.get('CONTENT_LENGTH')
+            if length != '0':
                 data = environ['wsgi.input'].read()
                 if len(data) != 0:
                     data = deco.decrypt(data)
                 environ['CONTENT_LENGTH'] = len(data)
-            environ['wsgi.input'] = io.BytesIO(data)
+                environ['wsgi.input'] = io.BytesIO(data)
+            elif length is None:
+                environ['wsgi.input'] = io.BytesIO()
             out = self.app(environ, Starter(deco, start_response)
                            .start_response)
-            return (deco.encrypt(data) for data in out)
+            return (deco.encrypt(data) + b'\r\n' for data in out)
 
 
 class Writer:

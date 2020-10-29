@@ -51,7 +51,7 @@ class TestCryptor(TestCase):
                 as loader, patch('builtins.open'):
             loader.return_value = ed448.Ed448PrivateKey.generate()
             self.crypt = crypter.Cryptor(
-                self.app, 'keyfile', self.user_service.public_data)
+                self.app, 'keyfile', self.user_service)
         # noinspection PyArgumentList
         self.kdf = ConcatKDFHash(hashes.SHA256(), 32, b'remo_serv')
 
@@ -96,6 +96,7 @@ class TestCryptor(TestCase):
         self.environ['CONTENT_LENGTH'] = 0
         self.environ['PATH_INFO'] = '/auth'
         start_response = Mock()
+        self.environ['wsgi.input'].read = Mock(return_value=b'')
         self.crypt(self.environ, start_response)
         self.app.assert_not_called()
         start_response.assert_called_once()
@@ -119,5 +120,5 @@ class TestCryptor(TestCase):
         remo_pub_bytes = base64.urlsafe_b64decode(data)
         remo_pub = x448.X448PublicKey.from_public_bytes(remo_pub_bytes)
         tempo = con.private.exchange(remo_pub)
-        key = self.kdf.derive(tempo)
+        key = base64.urlsafe_b64encode(self.kdf.derive(tempo))
         self.assertEqual(self.environ['SESSION'].key, key)
