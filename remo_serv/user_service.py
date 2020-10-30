@@ -42,17 +42,30 @@ class SqliteUserService(UserService):
         self.con = sqlite3.connect(db, check_same_thread=False)
         self.con.execute("""CREATE TABLE IF NOT EXISTS users(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user TEXT UNIQUE, key TEXT) """)
+        user TEXT UNIQUE, key TEXT, pub TEXT) """)
 
-    def add(self, user, key: ed448.Ed448PrivateKey = None):
-        if key is None:
+    def add(self, user, *, key: ed448.Ed448PrivateKey = None,
+            pub: ed448.Ed448PublicKey = None):
+        if key is None and pub is None:
             key = ed448.Ed448PrivateKey.generate()
-        data = base64.urlsafe_b64encode(
-            key.public_key().public_bytes(serialization.Encoding.Raw,
-                                          serialization.PublicFormat.Raw)
-        )
-        self.con.execute("INSERT INTO users(user, key) VALUES (?,?)",
-                         (user, data))
+        if pub is None:
+            pub = key.public_key()
+
+        if key is not None and (pub.public_bytes(
+                serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+                                != key.public_key().public_bytes(
+                    serialization.Encoding.Raw,
+                    serialization.PublicFormat.Raw)):
+            raise ValueError('Inconsistent private and public keys')
+        pub_data = base64.urlsafe_b64encode(pub.public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw))
+        # noinspection PyUnresolvedReferences
+        private_data = None if key is None else base64.urlsafe_b64encode(
+            key.private_bytes(
+                serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
+                serialization.NoEncryption()))
+        self.con.execute("INSERT INTO users(user, key, pub) VALUES (?,?,?)",
+                         (user, private_data, pub_data))
 
     def private(self, user: str) -> ed448.Ed448PrivateKey:
         try:
@@ -64,6 +77,9 @@ class SqliteUserService(UserService):
             base64.urlsafe_b64decode(data))
 
     def public_data(self, user: str) -> bytes:
-        key = self.private(user)
-        return key.public_key().public_bytes(
-            serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+        try:
+            data = self.con.execute("SELECT pub FROM users WHERE user=?",
+                                    (user,)).fetchone()[0]
+        except TypeError as e:
+            raise LookupError() from e
+        return data

@@ -15,7 +15,7 @@ import secrets
 import base64
 
 from remo_serv import session_manager, crypter, http_tools
-from user_service import UserService, MemoryUserService
+from remo_serv.user_service import UserService, MemoryUserService
 
 
 # noinspection PyUnresolvedReferences
