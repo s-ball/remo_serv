@@ -18,12 +18,20 @@ class Codec(io.RawIOBase):
         self.raw = base
         self.data = ''
         self.start = 0
+        self.first = True
         if decode:
             self.transform = codec.decrypt
             self.input = base.readline
         else:
-            self.transform = codec.encrypt
             self.input = lambda: base.read(self.block_size)
+
+    def transform(self, data):
+        if self.first:
+            self.first = False
+            prolog = b''
+        else:
+            prolog = b'\r\n'
+        return prolog + self.codec.encrypt(data)
 
     def readable(self):
         return True
