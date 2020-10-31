@@ -66,6 +66,7 @@ class SqliteUserService(UserService):
                 serialization.NoEncryption()))
         self.con.execute("INSERT INTO users(user, key, pub) VALUES (?,?,?)",
                          (user, private_data, pub_data))
+        self.con.commit()
 
     def private(self, user: str) -> ed448.Ed448PrivateKey:
         try:
@@ -82,4 +83,4 @@ class SqliteUserService(UserService):
                                     (user,)).fetchone()[0]
         except TypeError as e:
             raise LookupError() from e
-        return data
+        return base64.urlsafe_b64decode(data)

@@ -93,6 +93,7 @@ def parse(args):
     parser.add_argument('--port', '-p', help='Port', type=int)
     parser.add_argument('--interface', '-i', help='Interface')
     parser.add_argument('--user-service', '-u', help='User service')
+    parser.add_argument('--key-file', '-k', help='PEM main key file')
     parser.add_argument('--log', '-l', help='logging configuration file')
     parser.add_argument('--session', '-s', type=int,
                         help='Session timeout (seconds)')
@@ -117,6 +118,12 @@ def parse(args):
     conf['debug'] = bool(ns.debug)
     if ns.user_service is not None:
         conf['user-service'] = ns.user_service
+    elif 'user-service' not in  conf:
+        conf['user-service'] = 'SqliteUserService:users_db.sqlite'
+    if ns.key_file is not None:
+        conf['key-file'] = ns.key_file
+    elif 'key-file' not in conf:
+        conf['key-file'] = 'remo_serv_key.PEM'
     return conf
 
 
@@ -169,7 +176,7 @@ def run(args):
         sys.exit(1)
 
     serv = build_service(conf['user-service'])
-    crypt = Cryptor(hello_app, 'remo_serv.key', serv)
+    crypt = Cryptor(hello_app, conf['key-file'], serv)
     session_container = SessionContainer(crypt, conf['timeout'])
     logger.info('start')
     server = Server((conf['host'], conf['port']), session_container)

@@ -2,10 +2,9 @@
 import collections
 import urllib.request
 import base64
-import sqlite3
 import json
 import io
-from http_tools import Codec
+from remo_serv.http_tools import Codec
 
 from cryptography import fernet
 from cryptography.hazmat.primitives import hashes, serialization
@@ -93,20 +92,19 @@ def login(url: str, user: str, key: ed448.Ed448PrivateKey,
 def run():
     global opener
 
-    with open('remo_serv.pub', 'rb') as fd:
+    with open('remo_serv.pem', 'rb') as fd:
         # noinspection PyArgumentList
         remo_pub = serialization.load_pem_public_key(fd.read())
-    con = sqlite3.connect('user_db.sqlite')
-    data = con.execute("SELECT key FROM users WHERE user = ?",
-                       ('foo',)).fetchone()[0]
-    own_key = ed448.Ed448PrivateKey.from_private_bytes(
-        base64.urlsafe_b64decode(data))
+    # noinspection PyArgumentList
+    with open('foo_key.PEM', 'rb') as fd:
+        own_key = serialization.load_pem_private_key(fd.read(), b'foo')
     opener = login(SERVER + '/auth', 'foo', own_key, remo_pub)
     r = opener.open(SERVER + '/info')
     print(r.code)
     print(r.headers, end='')
     data = r.read()
     print(data)
+
 
 opener = None
 

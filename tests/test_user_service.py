@@ -16,47 +16,42 @@ class TestSqliteUserService(TestCase):
     def test_none(self):
         self.user_service.add('foo')
         self.assertEqual(self.user_service.public_data('foo'),
-                         base64.urlsafe_b64encode(
-                             self.user_service.private('foo').public_key(
-                             ).public_bytes(serialization.Encoding.Raw,
-                                            serialization.PublicFormat.Raw)))
+                         self.user_service.private('foo').public_key()
+                         .public_bytes(serialization.Encoding.Raw,
+                                       serialization.PublicFormat.Raw))
 
     def test_private(self):
         key = ed448.Ed448PrivateKey.generate()
         self.user_service.add('foo', key=key)
         self.assertEqual(self.user_service.public_data('foo'),
-                         base64.urlsafe_b64encode(
-                             self.user_service.private('foo').public_key(
-                             ).public_bytes(serialization.Encoding.Raw,
-                                            serialization.PublicFormat.Raw)))
+                         self.user_service.private('foo').public_key()
+                         .public_bytes(serialization.Encoding.Raw,
+                                       serialization.PublicFormat.Raw))
+
         self.assertEqual(self.user_service.public_data('foo'),
-                         base64.urlsafe_b64encode(
-                             key.public_key(
-                             ).public_bytes(serialization.Encoding.Raw,
-                                            serialization.PublicFormat.Raw)))
+                         key.public_key().public_bytes(
+                             serialization.Encoding.Raw,
+                             serialization.PublicFormat.Raw))
 
     def test_public(self):
         key = ed448.Ed448PrivateKey.generate()
         self.user_service.add('foo', pub=key.public_key())
         self.assertEqual(self.user_service.public_data('foo'),
-                         base64.urlsafe_b64encode(
-                             key.public_key(
-                             ).public_bytes(serialization.Encoding.Raw,
-                                            serialization.PublicFormat.Raw)))
+                         key.public_key().public_bytes(
+                             serialization.Encoding.Raw,
+                             serialization.PublicFormat.Raw))
 
     def test_both_ok(self):
         key = ed448.Ed448PrivateKey.generate()
         self.user_service.add('foo', key=key, pub=key.public_key())
         self.assertEqual(self.user_service.public_data('foo'),
-                         base64.urlsafe_b64encode(
-                             self.user_service.private('foo').public_key(
-                             ).public_bytes(serialization.Encoding.Raw,
-                                            serialization.PublicFormat.Raw)))
+                         self.user_service.private('foo').public_key()
+                         .public_bytes(serialization.Encoding.Raw,
+                                       serialization.PublicFormat.Raw))
         self.assertEqual(self.user_service.public_data('foo'),
-                         base64.urlsafe_b64encode(
-                             key.public_key(
-                             ).public_bytes(serialization.Encoding.Raw,
-                                            serialization.PublicFormat.Raw)))
+                         key.public_key()
+                         .public_bytes(serialization.Encoding.Raw,
+                                       serialization.PublicFormat.Raw))
 
     def test_both_ko(self):
         key = ed448.Ed448PrivateKey.generate()
