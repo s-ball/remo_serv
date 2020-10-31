@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed448, x448
 from cryptography.hazmat.primitives.kdf.concatkdf import ConcatKDFHash
 
-from .http_tools import build_status
+from .http_tools import build_status, Codec
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,8 @@ class Cryptor:
             start_response(build_status(500), [('Content-Length', 0)])
             return [b'']
         if path == self.path:
+            data = environ['wsgi.input'].read()
             try:
-                data = environ['wsgi.input'].read()
                 if len(data) == 0 or environ['CONTENT_LENGTH'] == '0':
                     session.key = None
                     start_response(build_status(200),
@@ -74,6 +74,7 @@ class Cryptor:
                 self.key.sign(tmp_bytes))
             remo_pub = x448.X448PublicKey.from_public_bytes(pub)
             session_key = tmp_key.exchange(remo_pub)
+            # noinspection PyArgumentList
             kdf = ConcatKDFHash(hashes.SHA256(), 32, b'remo_serv')
             session.key = base64.urlsafe_b64encode(kdf.derive(session_key))
             session.user = user
@@ -91,16 +92,23 @@ class Cryptor:
         else:
             deco = fernet.Fernet(session.key)
             length = environ.get('CONTENT_LENGTH')
-            if length != '0':
+            if length == 0:
+                environ['wsgi.input'] = io.BytesIO()
+            elif length is not None:
                 data = environ['wsgi.input'].read()
                 if len(data) != 0:
                     data = deco.decrypt(data)
                 environ['CONTENT_LENGTH'] = len(data)
                 environ['wsgi.input'] = io.BytesIO(data)
-            elif length is None:
-                environ['wsgi.input'] = io.BytesIO()
-            out = self.app(environ, Starter(deco, start_response)
-                           .start_response)
+            else:
+                environ['wsgi.input'] = Codec(environ['wsgi.input'], deco,
+                                              allow_plain=False)
+            try:
+                out = self.app(environ, Starter(deco, start_response)
+                               .start_response)
+            except fernet.InvalidToken:
+                start_response(build_status(400), [])
+                return [b'Invalid encoding']
             return (deco.encrypt(data) + b'\r\n' for data in out)
 
 
@@ -110,7 +118,7 @@ class Writer:
         self.encoder = encoder
 
     def write(self, data):
-        self.stream.write(self.encoder.encrypt(data))
+        self.stream.write(self.encoder.encrypt(data) + b'\r\n')
 
 
 class Starter:

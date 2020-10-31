@@ -122,3 +122,52 @@ class TestCryptor(TestCase):
         tempo = con.private.exchange(remo_pub)
         key = base64.urlsafe_b64encode(self.kdf.derive(tempo))
         self.assertEqual(self.environ['SESSION'].key, key)
+
+    def test_content_length_0(self):
+        session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
+        self.environ['SESSION'].key = session_key
+        self.environ['CONTENT_LENGTH'] = 0
+        start_response = Mock()
+        self.app.return_value = [b'']
+        self.crypt(self.environ, start_response)
+        self.assertEqual(b'', self.environ['wsgi.input'].read())
+
+    def test_content_length(self):
+        session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
+        self.environ['SESSION'].key = session_key
+        codec = fernet.Fernet(session_key)
+        plain = b'abcdef'
+        data = codec.encrypt(plain)
+        self.environ['CONTENT_LENGTH'] = len(data)
+        self.environ['wsgi.input'] = io.BytesIO(data)
+        start_response = Mock()
+        self.app.return_value = [b'']
+        self.crypt(self.environ, start_response)
+        self.assertEqual(plain, self.environ['wsgi.input'].read())
+        self.assertEqual(len(plain), self.environ['CONTENT_LENGTH'])
+
+    def test_content_length_unknown(self):
+        session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
+        self.environ['SESSION'].key = session_key
+        codec = fernet.Fernet(session_key)
+        plains = [b'abc', b'def']
+        data = b''.join(codec.encrypt(x) + b'\r\n' for x in plains)
+        self.environ['wsgi.input'] = io.BytesIO(data)
+        start_response = Mock()
+        self.app.return_value = [b'']
+        self.crypt(self.environ, start_response)
+        self.assertEqual(b''.join(plains), self.environ['wsgi.input'].read())
+        self.assertFalse('CONTENT_LENGTH' in self.environ)
+
+    def test_data_error(self):
+        session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
+        self.environ['SESSION'].key = session_key
+        codec = fernet.Fernet(session_key)
+        plains = b'abcdef'
+        data = plains
+        self.environ['wsgi.input'] = io.BytesIO(data)
+        start_response = Mock()
+        self.app.side_effect = lambda environ, _x: [environ['wsgi.input'].read()]
+        self.crypt(self.environ, start_response)
+        self.assertEqual(http_tools.build_status(400),
+                         start_response.call_args[0][0])

@@ -13,12 +13,14 @@ def build_status(code):
 class Codec(io.RawIOBase):
     block_size = 8192
 
-    def __init__(self, base: io.RawIOBase, codec: fernet.Fernet, decode=True):
+    def __init__(self, base: io.RawIOBase, codec: fernet.Fernet, decode=True,
+                 allow_plain=True):
         self.codec = codec
         self.raw = base
         self.data = ''
         self.start = 0
         self.first = True
+        self.allow_plain = allow_plain
         if decode:
             self.transform = codec.decrypt
             self.input = base.readline
@@ -51,6 +53,8 @@ class Codec(io.RawIOBase):
                 try:
                     self.data = self.transform(tmp)
                 except fernet.InvalidToken:
+                    if not self.allow_plain:
+                        raise
                     self.data = tmp
                 self.start = 0
                 available = len(self.data)
