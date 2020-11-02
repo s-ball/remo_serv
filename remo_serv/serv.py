@@ -27,36 +27,41 @@ def hello_app(environ, start_response):
     if path == '/stop' and 'SERVER' in environ:
         environ['SERVER'].stop()
         status = 200
-    elif path == '/get':
-        filename = environ['wsgi.input'].read().decode()
-
-        def chunk(file):
-            with open(file, 'rb') as cfd:
-                while True:
-                    d = cfd.read(16384)
-                    if len(d) == 0:
-                        break
-                    yield d
-        out = chunk(filename)
-        status = 200
-    elif path == '/put':
-        data = environ['wsgi.input'].read(16384)
+    elif path.startswith('/get/'):
         try:
-            ix = data.index(b'\r\n')
-            filename = data[ix:]
+            filename = fernet.Fernet(environ['SESSION'].key).decrypt(
+                path[5:].encode()).decode()
+
+            def chunk(file):
+                with open(file, 'rb') as cfd:
+                    while True:
+                        d = cfd.read(16384)
+                        if len(d) == 0:
+                            break
+                        yield d
+            out = chunk(filename)
+            status = 200
+        except (fernet.InvalidToken, OSError):
+            status = 400
+    elif path.startswith('/put/'):
+        try:
+            filename = fernet.Fernet(environ['SESSION'].key).decrypt(
+                path[5:].encode()).decode()
             with open(filename, 'wb') as fd:
-                fd.write(data[ix+2])
                 while True:
                     data = environ['wsgi.input'].read(16384)
                     if len(data) == 0:
                         break
                     fd.write(data)
+        except (LookupError, AttributeError, ValueError, fernet.InvalidToken):
+            status = 400
+        try:
             status = 200
         except ValueError:
             status = 400
         except OSError:
             status = 500
-    elif path == '/info':
+    elif path == '/':
         out = [f'remo_serv {__version__} here'.encode()]
         status = 200
     elif path.startswith('/cmd/'):

@@ -136,6 +136,7 @@ class TestCryptor(TestCase):
         session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
         self.environ['SESSION'].key = session_key
         codec = fernet.Fernet(session_key)
+        # noinspection SpellCheckingInspection
         plain = b'abcdef'
         data = codec.encrypt(plain)
         self.environ['CONTENT_LENGTH'] = len(data)
@@ -162,7 +163,7 @@ class TestCryptor(TestCase):
     def test_data_error(self):
         session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
         self.environ['SESSION'].key = session_key
-        codec = fernet.Fernet(session_key)
+        # noinspection SpellCheckingInspection
         plains = b'abcdef'
         data = plains
         self.environ['wsgi.input'] = io.BytesIO(data)
