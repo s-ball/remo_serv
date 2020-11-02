@@ -4,6 +4,7 @@ import collections
 import io
 import json
 import urllib.request
+import http.client
 
 from cryptography import fernet
 from cryptography.hazmat.primitives import hashes, serialization
@@ -87,6 +88,26 @@ class Connection:
             local_file = remote_file
         with open(local_file, 'rb') as fd:
             self.opener.open(self.app_url + cmd.decode(), fd)
+
+    def exec(self, command: str) -> http.client.HTTPResponse:
+        cmd = b'/cmd/' + self.codec.encrypt(command.encode())
+        r = self.opener.open(self.app_url + cmd.decode())
+        return r
+
+    def iexec(self, command: str) -> http.client.HTTPResponse:
+        cmd = b'/icm/' + self.codec.encrypt(command.encode())
+        r = self.opener.open(self.app_url + cmd.decode())
+        return r
+
+    def idata(self, data: bytes) -> http.client.HTTPResponse:
+        cmd = b'/idt'
+        r = self.opener.open(self.app_url + cmd.decode())
+        return r
+
+    def end_cmd(self) -> http.client.HTTPResponse:
+        cmd = b'/end'
+        r = self.opener.open(self.app_url + cmd.decode())
+        return r
 
 
 def login(url: str, path: str, user: str, key: ed448.Ed448PrivateKey,

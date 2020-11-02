@@ -12,7 +12,7 @@ from cheroot.wsgi import Server  # , PathInfoDispatcher
 from .crypter import Cryptor
 from .http_tools import build_status
 from .session_manager import SessionContainer
-from . import user_service, __version__
+from . import user_service, non_block_wrapper, __version__
 
 from cryptography import fernet
 
@@ -24,6 +24,13 @@ def hello_app(environ, start_response):
     headers = [('Content_type', 'text/plain')]
     status = 404
     path = environ.get('PATH_INFO', '/')
+    try:
+        p = environ['SESSION']['__PROCESS__']
+        if path not in ('/idt', '/edt'):
+            p.stdout.stop = True
+            p.terminate()
+    except (LookupError, TypeError, AttributeError):
+        pass
     if path == '/stop' and 'SERVER' in environ:
         environ['SERVER'].stop()
         status = 200
@@ -39,6 +46,7 @@ def hello_app(environ, start_response):
                         if len(d) == 0:
                             break
                         yield d
+
             out = chunk(filename)
             status = 200
         except (fernet.InvalidToken, OSError):
@@ -85,6 +93,78 @@ def hello_app(environ, start_response):
             except RuntimeError as e:
                 print(e)
                 status = 500
+    elif path.startswith('/icm/'):
+        try:
+            cmd = fernet.Fernet(environ['SESSION'].key).decrypt(
+                path[5:].encode()).decode()
+        except (LookupError, AttributeError, ValueError, fernet.InvalidToken):
+            status = 403
+        if status != 403:
+            try:
+                data = environ['wsgi.input'].read()
+                p = subprocess.Popen(shlex.split(cmd),
+                                     stdin=subprocess.PIPE,
+                                     stdout=subprocess.PIPE,
+                                     stderr=subprocess.STDOUT)
+                p.stdout = non_block_wrapper.NonBlockWrapper(p.stdout)
+                p.stdin.write(data)
+                data = p.stdout.read()
+                if data == b'':
+                    p = None
+                elif data is None:
+                    data = b''
+                out = [data]
+                status = 200
+                if p is not None:
+                    environ['SESSION']['__PROCESS__'] = p
+            except RuntimeError as e:
+                print(e)
+                status = 500
+    elif path == '/idt':
+        try:
+            p = environ['SESSION']['__PROCESS__']
+        except (LookupError, TypeError):
+            status = 400
+        if status != 400:
+            try:
+                data = environ['wsgi.input'].read()
+                if len(data) > 0:
+                    if not p.stdin.closed:
+                        p.stdin.write(data)
+
+                data = p.stdout.read()
+                if data == b'':
+                    p = None
+                elif data is None:
+                    data = b''
+                out = [data]
+                status = 200
+                if p is None:
+                    del environ['SESSION']['__PROCESS__']
+            except RuntimeError as e:
+                print(e)
+                status = 500
+    elif path == '/edt':
+        try:
+            p = environ['SESSION']['__PROCESS__']
+        except (LookupError, TypeError):
+            status = 400
+        if status != 400:
+            try:
+                p.stdin.close()
+
+                data = p.stdout.read()
+                if data == b'':
+                    p = None
+                elif data is None:
+                    data = b''
+                out = [data]
+                status = 200
+                if p is None:
+                    del environ['SESSION']['__PROCESS__']
+            except RuntimeError as e:
+                print(e)
+                status = 500
 
     if out == [b'']:
         headers.append(('Content-Length', '0'))
@@ -123,7 +203,7 @@ def parse(args):
     conf['debug'] = bool(ns.debug)
     if ns.user_service is not None:
         conf['user-service'] = ns.user_service
-    elif 'user-service' not in  conf:
+    elif 'user-service' not in conf:
         conf['user-service'] = 'SqliteUserService:users_db.sqlite'
     if ns.key_file is not None:
         conf['key-file'] = ns.key_file

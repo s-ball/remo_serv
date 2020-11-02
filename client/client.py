@@ -18,12 +18,13 @@ def run():
     print(r.headers, end='')
     data = r.read()
     print(data)
-    con.get('sba_key.pem', 'x.pem')
+    con.get('foo_key.pem', 'x.pem')
     con.put('y.pem', 'x.pem')
-    # noinspection PyUnresolvedReferences
-    cmd = con.codec.encrypt(b'cmd /c echo foo')
-
-    r = con.opener.open(SERVER + '/cmd/' + cmd.decode())
+    r = con.exec('cmd /c echo foo')
+    print(r.read())
+    r = con.iexec('cmd /c echo foo')
+    print(r.read())
+    r = con.idata(None)
     print(r.read())
 
 
