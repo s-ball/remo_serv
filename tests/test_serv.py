@@ -21,7 +21,7 @@ class TestServ(unittest.TestCase):
     def test_hello_resp(self):
         start_response = Mock()
         environ = {'PATH_INFO': '/'}
-        serv.hello_app(environ, start_response)
+        serv.application(environ, start_response)
         ok = http.HTTPStatus.OK
         # noinspection PyUnresolvedReferences
         ok = '{} {}'.format(ok.value, ok.phrase)

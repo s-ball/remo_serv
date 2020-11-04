@@ -3,23 +3,22 @@
 import argparse
 import logging.config
 import os.path
+import shlex
+import subprocess
 import sys
-import io
 
 import toml
 from cheroot.wsgi import Server  # , PathInfoDispatcher
+from cryptography import fernet
 
+from . import user_service, non_block_wrapper, __version__
 from .crypter import Cryptor
 from .http_tools import build_status
 from .session_manager import SessionContainer
-from . import user_service, non_block_wrapper, __version__
-
-from cryptography import fernet
-
-import subprocess, shlex
 
 
-def hello_app(environ, start_response):
+# noinspection PyUnboundLocalVariable
+def application(environ, start_response):
     out = [b'']
     headers = [('Content_type', 'text/plain')]
     status = 404
@@ -29,6 +28,7 @@ def hello_app(environ, start_response):
         if path not in ('/idt', '/edt'):
             p.stdout.stop = True
             p.terminate()
+            del environ['SESSION']['__PROCESS__']
     except (LookupError, TypeError, AttributeError):
         pass
     if path == '/stop' and 'SERVER' in environ:
@@ -52,6 +52,7 @@ def hello_app(environ, start_response):
         except (fernet.InvalidToken, OSError):
             status = 400
     elif path.startswith('/put/'):
+        filename = None
         try:
             filename = fernet.Fernet(environ['SESSION'].key).decrypt(
                 path[5:].encode()).decode()
@@ -61,14 +62,20 @@ def hello_app(environ, start_response):
                     if len(data) == 0:
                         break
                     fd.write(data)
+            status = 200
         except (LookupError, AttributeError, ValueError, fernet.InvalidToken):
             status = 400
-        try:
-            status = 200
-        except ValueError:
-            status = 400
+            try:
+                if filename is not None:
+                    os.remove(filename)
+            except OSError:
+                pass
         except OSError:
             status = 500
+            try:
+                os.remove(filename)
+            except OSError:
+                pass
     elif path == '/':
         out = [f'remo_serv {__version__} here'.encode()]
         status = 200
@@ -86,12 +93,11 @@ def hello_app(environ, start_response):
                                    stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT)
 
-                data = p.stdout
-                out = [data]
+                # noinspection PyTypeChecker
+                out = [p.stdout]
                 status = 200
 
-            except RuntimeError as e:
-                print(e)
+            except RuntimeError:
                 status = 500
     elif path.startswith('/icm/'):
         try:
@@ -141,8 +147,7 @@ def hello_app(environ, start_response):
                 status = 200
                 if p is None:
                     del environ['SESSION']['__PROCESS__']
-            except RuntimeError as e:
-                print(e)
+            except RuntimeError:
                 status = 500
     elif path == '/edt':
         try:
@@ -162,8 +167,7 @@ def hello_app(environ, start_response):
                 status = 200
                 if p is None:
                     del environ['SESSION']['__PROCESS__']
-            except RuntimeError as e:
-                print(e)
+            except RuntimeError:
                 status = 500
 
     if out == [b'']:
@@ -261,7 +265,7 @@ def run(args):
         sys.exit(1)
 
     serv = build_service(conf['user-service'])
-    crypt = Cryptor(hello_app, conf['key-file'], serv)
+    crypt = Cryptor(application, conf['key-file'], serv)
     session_container = SessionContainer(crypt, conf['timeout'])
     logger.info('start')
     server = Server((conf['host'], conf['port']), session_container)
