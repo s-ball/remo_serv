@@ -101,11 +101,12 @@ class Connection:
 
     def idata(self, data: bytes) -> http.client.HTTPResponse:
         cmd = b'/idt'
-        r = self.opener.open(self.app_url + cmd.decode())
+        r = self.opener.open(self.app_url + cmd.decode(),
+                             data.encode() + b'\n')
         return r
 
     def end_cmd(self) -> http.client.HTTPResponse:
-        cmd = b'/end'
+        cmd = b'/edt'
         r = self.opener.open(self.app_url + cmd.decode())
         return r
 

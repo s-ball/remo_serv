@@ -12,7 +12,8 @@ class NonBlockWrapper(io.RawIOBase):
         self.lock = threading.Lock()
         self.ended = False
         self.stop = False
-        threading.Thread(target=self.reader).start()
+        self.t = threading.Thread(target=self.reader, daemon=True)
+        self.t.start()
 
     def readable(self) -> bool:
         return True
