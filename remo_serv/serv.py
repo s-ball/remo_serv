@@ -3,7 +3,9 @@
 import argparse
 import logging.config
 import os.path
+import select
 import shlex
+import socket
 import subprocess
 import sys
 
@@ -11,7 +13,7 @@ import toml
 from cheroot.wsgi import Server  # , PathInfoDispatcher
 from cryptography import fernet
 
-from . import user_service, non_block_wrapper, __version__
+from . import user_service, __version__
 from .crypter import Cryptor
 from .http_tools import build_status
 from .session_manager import SessionContainer
@@ -24,10 +26,11 @@ def application(environ, start_response):
     status = 404
     path = environ.get('PATH_INFO', '/')
     try:
-        p = environ['SESSION']['__PROCESS__']
+        p, m = environ['SESSION']['__PROCESS__']
         if path not in ('/idt', '/edt'):
-            p.stdout.stop = True
-            p.terminate()
+            m.close()
+            if not p.poll():
+                p.terminate()
             del environ['SESSION']['__PROCESS__']
     except (LookupError, TypeError, AttributeError):
         pass
@@ -107,41 +110,46 @@ def application(environ, start_response):
             status = 403
         if status != 403:
             try:
+                m, s = socket.socketpair(socket.AF_UNIX)
                 data = environ['wsgi.input'].read()
+                # noinspection PyTypeChecker
                 p = subprocess.Popen(shlex.split(cmd),
-                                     stdin=subprocess.PIPE,
-                                     stdout=subprocess.PIPE,
-                                     stderr=subprocess.STDOUT)
-                p.stdout = non_block_wrapper.NonBlockWrapper(p.stdout)
-                p.stdin.write(data)
-                data = p.stdout.read()
-                if data == b'':
-                    p = None
-                elif data is None:
+                                     bufsize=0,
+                                     stdin=s,
+                                     stdout=s,
+                                     stderr=s)
+                m.send(data)
+                if [m] == select.select([m], [], [], .1)[0]:
+                    data = m.recv(8192)
+                    if data == b'':
+                        p = None
+                else:
                     data = b''
                 out = [data]
                 status = 200
                 if p is not None:
-                    environ['SESSION']['__PROCESS__'] = p
+                    environ['SESSION']['__PROCESS__'] = (p, m)
+            except AttributeError:
+                status = 404
             except RuntimeError as e:
                 print(e)
                 status = 500
     elif path == '/idt':
         try:
-            p = environ['SESSION']['__PROCESS__']
+            p, m = environ['SESSION']['__PROCESS__']
         except (LookupError, TypeError):
             status = 400
         if status != 400:
             try:
                 data = environ['wsgi.input'].read()
                 if len(data) > 0:
-                    if not p.stdin.closed:
-                        p.stdin.write(data)
-
-                data = p.stdout.read()
-                if data == b'':
-                    p = None
-                elif data is None:
+                    m.send(data)
+                sel = select.select([m], [], [], .1)
+                if [m] == sel[0]:
+                    data = m.recv(8192)
+                    if data == b'':
+                        p = None
+                else:
                     data = b''
                 out = [data]
                 status = 200
@@ -149,19 +157,21 @@ def application(environ, start_response):
                     del environ['SESSION']['__PROCESS__']
             except RuntimeError:
                 status = 500
+            pass
     elif path == '/edt':
         try:
-            p = environ['SESSION']['__PROCESS__']
+            p, m = environ['SESSION']['__PROCESS__']
         except (LookupError, TypeError):
             status = 400
         if status != 400:
             try:
-                p.stdin.close()
+                m.shutdown(socket.SHUT_WR)
 
-                data = p.stdout.read()
-                if data == b'':
-                    p = None
-                elif data is None:
+                if [m] == select.select([m], [], [], .1)[0]:
+                    data = m.recv(8192)
+                    if data == b'':
+                        p = None
+                else:
                     data = b''
                 out = [data]
                 status = 200
@@ -212,7 +222,7 @@ def parse(args):
     if ns.key_file is not None:
         conf['key-file'] = ns.key_file
     elif 'key-file' not in conf:
-        conf['key-file'] = 'remo_serv_key.PEM'
+        conf['key-file'] = 'remo_serv_key.pem'
     return conf
 
 

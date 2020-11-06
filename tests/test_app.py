@@ -24,6 +24,13 @@ class MyTestCase(TestCase):
             for _ in range(128):
                 fd.write(bytes(range(256)))
 
+    def tearDown(self) -> None:
+        try:
+            m = self.environ['SESSION']['__PROCESS__'][1]
+            m.close()
+        except (LookupError, TypeError):
+            pass
+
     def test_data(self):
         self.assertTrue(os.path.exists('/data'))
         st = os.stat('/data')
@@ -117,7 +124,9 @@ class MyTestCase(TestCase):
         self.environ['PATH_INFO'] = '/icm/' + codec.encrypt('do something'.encode()).decode()
         self.environ['wsgi.input'] = Mock()
         start_response = Mock()
-        with patch('subprocess.Popen') as run:
+        with patch('subprocess.Popen') as run, \
+                patch('socket.socketpair') as pair, \
+                patch('select.select') as sel:
             def tempo_data():
                 data = [(0, b'ab'), (.2, b'cd'), (0, b'')]
                 it = iter(data)
@@ -129,15 +138,18 @@ class MyTestCase(TestCase):
 
                 return f
             proc = Mock()
-            proc.stdout = Mock()
-            proc.stdout.read = Mock(side_effect=tempo_data())
+            s = Mock()
+            m = Mock()
+            m.recv = Mock(side_effect=tempo_data())
             run.return_value = proc
+            pair.return_value = m, s
+            sel.side_effect = ([m], [], [m])
             out = list(application(self.environ, start_response))
             self.assertEqual(['do', 'something'], list(run.call_args[0][0]))
         start_response.assert_called_once()
         self.assertTrue(start_response.call_args[0][0].startswith('200'))
         self.assertTrue(out in ([b'ab'], [b'']))
-        self.assertEqual(proc, self.environ['SESSION']['__PROCESS__'])
+        self.assertEqual((proc, m), self.environ['SESSION']['__PROCESS__'])
 
     def test_idt(self):
         self.test_icmd()
@@ -146,7 +158,10 @@ class MyTestCase(TestCase):
         self.environ['wsgi.input'] = Mock()
         self.environ['wsgi.input'].read = Mock(return_value=b'')
         start_response = Mock()
-        out = list(application(self.environ, start_response))
+        with patch('select.select') as sel:
+            m = self.environ['SESSION']['__PROCESS__'][1]
+            sel.side_effect = ([m], [m])
+            out = list(application(self.environ, start_response))
         start_response.assert_called_once()
         self.assertTrue(start_response.call_args[0][0].startswith('200'))
         self.assertTrue(out[0].endswith(b'cd'))
@@ -160,7 +175,10 @@ class MyTestCase(TestCase):
         self.environ['wsgi.input'] = Mock()
         self.environ['wsgi.input'].read = Mock(return_value=b'')
         start_response = Mock()
-        out = list(application(self.environ, start_response))
+        with patch('select.select') as sel:
+            m = self.environ['SESSION']['__PROCESS__'][1]
+            sel.side_effect = ([m], [m])
+            out = list(application(self.environ, start_response))
         start_response.assert_called_once()
         self.assertTrue(start_response.call_args[0][0].startswith('200'))
         self.assertEqual([b''], out)
@@ -173,9 +191,12 @@ class MyTestCase(TestCase):
         self.environ['wsgi.input'] = Mock()
         self.environ['wsgi.input'].read = Mock(return_value=b'')
         start_response = Mock()
-        out = list(application(self.environ, start_response))
+        with patch('select.select') as sel:
+            m = self.environ['SESSION']['__PROCESS__'][1]
+            sel.side_effect = ([m], [m])
+            out = list(application(self.environ, start_response))
         start_response.assert_called_once()
         self.assertTrue(start_response.call_args[0][0].startswith('200'))
         self.assertTrue(out[0].endswith(b'cd'))
         self.assertTrue('__PROCESS__' in self.environ['SESSION'])
-        self.assertTrue(self.environ['SESSION']['__PROCESS__'].stdin.closed)
+        m.shutdown.assert_called_once()

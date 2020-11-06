@@ -22,7 +22,7 @@ def add(base: str, user: str, pem: str):
         base += '.sqlite'
     users = SqliteUserService(base)
     if pem is None:
-        pem = user + '.PEM'
+        pem = user + '.pem'
     with open(pem, 'rb') as fd:
         # noinspection PyArgumentList
         key = serialization.load_pem_public_key(fd.read())
