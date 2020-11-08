@@ -12,6 +12,49 @@ from remo_serv.serv import application
 from remo_serv.session_manager import Session
 
 
+class AddAttr:
+    def __init__(self, obj, attr, value):
+        if isinstance(obj, str):
+            import importlib
+            obj = importlib.import_module(obj)
+
+        self.obj = obj
+        self.attr = attr
+        self.value = value
+        self.add = not hasattr(obj, attr)
+
+    def __enter__(self):
+        if self.add:
+            setattr(self.obj, self.attr, self.value)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.add:
+            delattr(self.obj, self.attr)
+
+
+class DelAttr:
+    def __init__(self, obj, attr):
+        if isinstance(obj, str):
+            import importlib
+            obj = importlib.import_module(obj)
+
+        self.obj = obj
+        self.attr = attr
+        if hasattr(obj, attr):
+            self.remove = True
+            self.value = getattr(obj, attr)
+        else:
+            self.remove = False
+
+    def __enter__(self):
+        if self.remove:
+            delattr(self.obj, self.attr)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.remove:
+            setattr(self.obj, self.attr, self.value)
+
+
 # noinspection PyUnresolvedReferences,PyTypeChecker
 class MyTestCase(TestCase):
     def setUp(self) -> None:
@@ -126,6 +169,7 @@ class MyTestCase(TestCase):
         start_response = Mock()
         with patch('subprocess.Popen') as run, \
                 patch('socket.socketpair') as pair, \
+                AddAttr('socket', 'AF_UNIX', None), \
                 patch('select.select') as sel:
             def tempo_data():
                 data = [(0, b'ab'), (.2, b'cd'), (0, b'')]
@@ -143,12 +187,12 @@ class MyTestCase(TestCase):
             m.recv = Mock(side_effect=tempo_data())
             run.return_value = proc
             pair.return_value = m, s
-            sel.side_effect = ([m], [], [m])
+            sel.side_effect = (([m], [], []), ([], [], []), ([m], [], []))
             out = list(application(self.environ, start_response))
             self.assertEqual(['do', 'something'], list(run.call_args[0][0]))
         start_response.assert_called_once()
         self.assertTrue(start_response.call_args[0][0].startswith('200'))
-        self.assertTrue(out in ([b'ab'], [b'']))
+        self.assertEqual(out, [b'ab'])
         self.assertEqual((proc, m), self.environ['SESSION']['__PROCESS__'])
 
     def test_idt(self):
@@ -160,7 +204,7 @@ class MyTestCase(TestCase):
         start_response = Mock()
         with patch('select.select') as sel:
             m = self.environ['SESSION']['__PROCESS__'][1]
-            sel.side_effect = ([m], [m])
+            sel.side_effect = (([m], [], []), ([m], [], []))
             out = list(application(self.environ, start_response))
         start_response.assert_called_once()
         self.assertTrue(start_response.call_args[0][0].startswith('200'))
@@ -177,7 +221,7 @@ class MyTestCase(TestCase):
         start_response = Mock()
         with patch('select.select') as sel:
             m = self.environ['SESSION']['__PROCESS__'][1]
-            sel.side_effect = ([m], [m])
+            sel.side_effect = (([m], [], []), ([m], [], []))
             out = list(application(self.environ, start_response))
         start_response.assert_called_once()
         self.assertTrue(start_response.call_args[0][0].startswith('200'))
@@ -193,10 +237,24 @@ class MyTestCase(TestCase):
         start_response = Mock()
         with patch('select.select') as sel:
             m = self.environ['SESSION']['__PROCESS__'][1]
-            sel.side_effect = ([m], [m])
+            sel.side_effect = (([m], [], []), ([m], [], []))
             out = list(application(self.environ, start_response))
         start_response.assert_called_once()
         self.assertTrue(start_response.call_args[0][0].startswith('200'))
         self.assertTrue(out[0].endswith(b'cd'))
         self.assertTrue('__PROCESS__' in self.environ['SESSION'])
         m.shutdown.assert_called_once()
+
+    def test_no_afunix(self):
+        codec = fernet.Fernet(self.session_key)
+        self.environ['PATH_INFO'] = '/icm/' + codec.encrypt('do something'.encode()).decode()
+        self.environ['wsgi.input'] = Mock()
+        start_response = Mock()
+        with patch('select.select') as sel, \
+                DelAttr('socket', 'AF_UNIX'):
+            out = list(application(self.environ, start_response))
+            sel.assert_not_called()
+        start_response.assert_called_once()
+        self.assertTrue(start_response.call_args[0][0].startswith('404'))
+        self.assertEqual(out, [b''])
+        self.assertFalse('__PROCESS__' in self.environ['SESSION'])
