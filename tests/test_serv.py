@@ -7,21 +7,14 @@ from unittest.mock import Mock
 import http
 import logging
 
-
-def get_serv():
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from remo_serv import serv
-    return serv
-
-
-serv = get_serv()
+from remo_serv import serv, app
 
 
 class TestServ(unittest.TestCase):
     def test_hello_resp(self):
         start_response = Mock()
         environ = {'PATH_INFO': '/'}
-        serv.application(environ, start_response)
+        app.remo_application(environ, start_response)
         ok = http.HTTPStatus.OK
         # noinspection PyUnresolvedReferences
         ok = '{} {}'.format(ok.value, ok.phrase)
@@ -52,13 +45,13 @@ class TestServ(unittest.TestCase):
         self.assertEqual(True, conf['debug'])
 
     def test_logging_deft(self):
-        serv.config_logging({'debug': False})
+        app.config_logging({'debug': False})
         root = logging.getLogger()
         self.assertEqual(1, len(root.handlers))
         self.assertEqual(logging.WARNING, root.getEffectiveLevel())
 
     def test_logging_debug(self):
-        serv.config_logging({'debug': True})
+        app.config_logging({'debug': True})
         root = logging.getLogger()
         self.assertEqual(logging.DEBUG, root.getEffectiveLevel())
 

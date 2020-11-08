@@ -8,7 +8,7 @@ import itertools
 import time
 from cryptography import fernet
 
-from remo_serv.serv import application
+from remo_serv.app import remo_application as application
 from remo_serv.session_manager import Session
 
 
