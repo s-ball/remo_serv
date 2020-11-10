@@ -56,7 +56,7 @@ class TestCryptor(TestCase):
         self.kdf = ConcatKDFHash(hashes.SHA256(), 32, b'remo_serv')
 
     def test_no_auth_public(self):
-        self.environ['PATH_INFO'] = '/public'
+        self.environ['PATH_INFO'] = '/info'
         start_response = Mock()
         self.crypt(self.environ, start_response)
         self.app.assert_called_once_with(self.environ, start_response)

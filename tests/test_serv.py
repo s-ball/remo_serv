@@ -13,7 +13,7 @@ from remo_serv import serv, app
 class TestServ(unittest.TestCase):
     def test_hello_resp(self):
         start_response = Mock()
-        environ = {'PATH_INFO': '/'}
+        environ = {'PATH_INFO': '/info'}
         app.remo_application(environ, start_response)
         ok = http.HTTPStatus.OK
         # noinspection PyUnresolvedReferences

@@ -1,5 +1,7 @@
 #  Copyright (c) 2020 SBA- MIT License
 
+"""WSGI middleware for session management.
+"""
 import threading
 
 import secrets
@@ -15,6 +17,14 @@ SESSIONS = {}
 
 
 class Session(collections.abc.MutableMapping):
+    """MutableMapping representing a session.
+
+    A session contains:
+    - a session id
+    - a timestamp used to expire the session
+    - a user name
+    - a dictionary for its content
+    """
     def __init__(self, s_id):
         self.id = s_id
         self.timestamp = time.time()
@@ -23,6 +33,7 @@ class Session(collections.abc.MutableMapping):
         self.user = None
 
     def refresh(self):
+        """Resets the session timestamp to the current time."""
         self.timestamp = time.time()
 
     def __getitem__(self, item):
@@ -42,7 +53,15 @@ class Session(collections.abc.MutableMapping):
 
 
 class SessionContainer:
+    """A WSGI middleware that creates session, puts them into the WSGI
+    environment and eventually expires them.
+    """
     def __init__(self, app, timeout=600, delay=60):
+        """Constructor parameters:
+        - app: the wrapped WSGI application
+        - timeout: maximum session duration (in seconds) default 600
+        - delay: step in seconds between calls to the expirer thread
+        """
         self.app = app
         self.sessions = {}
         self.timeout = timeout
@@ -54,6 +73,11 @@ class SessionContainer:
             self.expire_thread.start()
 
     def get_session(self, session_id, create=False) -> Optional[Session]:
+        """Gets a session from the container.
+
+        If session_id exists and is not expired, returns it; else returns
+        None if create is False, or create a new session.
+        """
         with self.lock:
             now = time.time()
             try:
@@ -76,6 +100,7 @@ class SessionContainer:
             return session
 
     def _do_expire(self, delta):
+        """The expirer thread method."""
         while True:
             with self.lock:
                 now = time.time()
@@ -86,6 +111,7 @@ class SessionContainer:
             time.sleep(delta)
 
     def session_build(self, environ):
+        """Builds a new session and registers it in the WSGI environment."""
         s = self.get_session(None, True)
         try:
             del self.sessions[environ['SESSION'].id]
@@ -95,6 +121,11 @@ class SessionContainer:
         return s
 
     def __call__(self, environ, start_response):
+        """The WSGI application call.
+
+        Puts the session in the environment (eventually a new one) and
+        calls the wrapped WSGI application
+        """
         def my_start_response(status, headers, exc_info=None):
             try:
                 sess_id = environ['SESSION'].id
@@ -114,6 +145,7 @@ class SessionContainer:
 
 
 def get_session_id(environ):
+    """Extract the session id from a SESSION_ID cookie or returns None."""
     session_id = environ.get('HTTP_COOKIE')
     if session_id is not None:
         try:

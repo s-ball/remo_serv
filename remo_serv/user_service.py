@@ -9,18 +9,27 @@ from cryptography.hazmat.primitives.asymmetric import ed448
 
 
 class UserService(abc.ABC):
+    """Abstract class representing a user service."""
     @abc.abstractmethod
     def private(self, user: str) -> ed448.Ed448PrivateKey:
+        """Returns the private key for a user (if available)"""
         pass
 
     @abc.abstractmethod
     def public_data(self, user: str) -> bytes:
+        """Returns the bytes for the public key of a user"""
         pass
 
 
 # noinspection PyArgumentList,PyTypeChecker
 class MemoryUserService(UserService):
+    """Simple in memory implementation which generates ed448 keys for a
+    number of users.
+    """
     def __init__(self, *users):
+        """Constructor parameters:
+        - *users list of users to consider.
+        """
         self.users = {}
         for user in users:
             self.users[user] = ed448.Ed448PrivateKey.generate()
@@ -36,7 +45,12 @@ class MemoryUserService(UserService):
 
 # noinspection PyTypeChecker
 class SqliteUserService(UserService):
+    """SQLite3 implementation of a UserService.
+    """
     def __init__(self, db):
+        """Constructor parameters:
+        - db database path
+        """
         import sqlite3
 
         self.con = sqlite3.connect(db, check_same_thread=False)
@@ -46,6 +60,8 @@ class SqliteUserService(UserService):
 
     def add(self, user, *, key: ed448.Ed448PrivateKey = None,
             pub: ed448.Ed448PublicKey = None):
+        """ Add a new user and its public and/or private keys.
+        """
         if key is None and pub is None:
             key = ed448.Ed448PrivateKey.generate()
         if pub is None:

@@ -79,16 +79,6 @@ class MyTestCase(TestCase):
         st = os.stat('/data')
         self.assertEqual(32768, st.st_size)
 
-    def test_stop(self):
-        self.environ['SERVER'] = Mock()
-        self.environ['PATH_INFO'] = '/stop'
-        start_response = Mock()
-        application(self.environ, start_response)
-        start_response.assert_called_once()
-        self.assertEqual('200 OK', start_response.call_args[0][0])
-        # noinspection PyUnresolvedReferences
-        self.environ['SERVER'].stop.assert_called_once()
-
     def test_get(self):
         codec = fernet.Fernet(self.session_key)
         self.environ['PATH_INFO'] = '/get/' + codec.encrypt('/data'.encode()).decode()
@@ -242,7 +232,7 @@ class MyTestCase(TestCase):
         start_response.assert_called_once()
         self.assertTrue(start_response.call_args[0][0].startswith('200'))
         self.assertTrue(out[0].endswith(b'cd'))
-        self.assertTrue('__PROCESS__' in self.environ['SESSION'])
+        self.assertFalse('__PROCESS__' in self.environ['SESSION'])
         m.shutdown.assert_called_once()
 
     def test_no_afunix(self):

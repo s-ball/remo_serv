@@ -1,16 +1,20 @@
 #  Copyright (c) 2020 SBA- MIT License
 
+"""Various utilities used both by servers and clients."""
+
 import http.client
 import io
 from cryptography import fernet
 
 
 def build_status(code):
+    """Transform a numeric code (200) in a HTTP status ('200 OK')."""
     status = http.HTTPStatus(code)
     return '{:3d} {}'.format(code, status.phrase)
 
 
 class Codec(io.RawIOBase):
+    """io wrapper to automatically encrypt/decrypt a stream"""
     block_size = 8192
 
     def __init__(self, base: io.RawIOBase, codec: fernet.Fernet, decode=True,

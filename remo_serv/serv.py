@@ -1,5 +1,28 @@
 #  Copyright (c) 2020 SBA- MIT License
 
+"""WSGI server based on cherrypy.cheroot calling app.application.
+
+It is intended to be a frontend in development mode, but can be used
+anywhere cherrypy.cheroot is suitable.
+
+usage: serv.py [-h] [--conf CONF] [--port PORT] [--interface INTERFACE] [--user-service USER_SERVICE] [--key-file KEY_FILE] [--log LOG] [--session SESSION] [--debug]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --conf CONF, -c CONF  Configuration file
+  --port PORT, -p PORT  Port
+  --interface INTERFACE, -i INTERFACE
+                        Interface
+  --user-service USER_SERVICE, -u USER_SERVICE
+                        User service
+  --key-file KEY_FILE, -k KEY_FILE
+                        PEM main key file
+  --log LOG, -l LOG     logging configuration file
+  --session SESSION, -s SESSION
+                        Session timeout (seconds)
+  --debug, -d           Add debugging traces in log
+
+"""
 import argparse
 import os.path
 import sys
@@ -11,6 +34,7 @@ from .app import application
 
 
 def parse(args):
+    """Parses the options on the command line."""
     parser = argparse.ArgumentParser(os.path.basename(args[0]))
     parser.add_argument('--conf', '-c', help='Configuration file')
     parser.add_argument('--port', '-p', help='Port', type=int)
@@ -51,14 +75,16 @@ def parse(args):
 
 
 class App:
+    """Relay WSGI application to configure the real one."""
     def __init__(self, conf):
         self.environ = {
             'KEYFILE': conf['key-file'],
             'USER_SERVICE': conf['user-service'],
-            'DEBUG': conf['debug'],
+            'remo_serv.debug': conf['debug'],
+            'remo_serv.timeout': conf['timeout']
         }
         if 'log' in conf:
-            self.environ['LOGGING'] = conf('log')
+            self.environ['remo_serv.log'] = conf('log')
 
     def __call__(self, environ, start_response):
         environ.update(self.environ)
@@ -66,6 +92,7 @@ class App:
 
 
 def run(args):
+    """Actually configure and run the actual server with the application"""
     conf = parse(args)
     server = Server((conf['host'], conf['port']), App(conf))
     server.start()

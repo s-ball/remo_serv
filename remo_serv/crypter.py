@@ -1,5 +1,6 @@
 #  Copyright (c) 2020 SBA- MIT License
 
+"""Encryption/decryption and signature management using cryptography."""
 import sys
 import base64
 import io
@@ -18,9 +19,22 @@ logger = logging.getLogger(__name__)
 
 
 class Cryptor:
+    """WSGI middleware handling en/de-cryption of request and response bodies.
+
+    The middleware internally handles the /auth PATH_INFO to perform login.
+    """
     # noinspection PyArgumentList
     def __init__(self, app, key, user_service, path='/auth',
-                 public='/pub'):
+                 public='/info'):
+        """Constructor parameters:
+        - app: the WSGI application wrapped in the middleware
+        - key: the private (ed448) key used to sign
+        - user_service: a UserService implementation to get the public
+        keys of registered users
+        - path: the authentication path (default /auth)
+        - public: the root of a public subtree accessible without
+        authentication (default /info)
+        """
         if isinstance(key, ed448.Ed448PrivateKey):
             self.key = key
         else:
@@ -32,10 +46,12 @@ class Cryptor:
         self.public = public
 
     def __call__(self, environ, start_response):
+        """The call to the WSGI middleware."""
         path = environ.get('PATH_INFO', '/')
         try:
             session = environ['SESSION']
         except LookupError:
+            logger.error('No valid session')
             start_response(build_status(500), [('Content-Length', 0)])
             return [b'']
         if path == self.path:
@@ -54,6 +70,7 @@ class Cryptor:
                 pub = base64.urlsafe_b64decode(data['key'].encode())
                 sign = base64.urlsafe_b64decode(data['sign'].encode())
             except (json.JSONDecodeError, LookupError):
+                logger.warning('Invalid authentication json %s', str(data))
                 start_response(build_status(400), [('Content-Length', '0')])
                 return [b'']
             try:
@@ -78,7 +95,7 @@ class Cryptor:
             kdf = ConcatKDFHash(hashes.SHA256(), 32, b'remo_serv')
             session.key = base64.urlsafe_b64encode(kdf.derive(session_key))
             session.user = user
-            logger.debug('Login %s (%s - %s)', user, session.id, session.key)
+            logger.info('Login %s (%s - %s)', user, session.id, session.key)
             start_response(build_status(200),
                            [('Content-type', 'text_plain'),
                             ('Content-Length', str(len(tmp_text)))])
@@ -87,6 +104,7 @@ class Cryptor:
             if path.startswith(self.public):
                 return self.app(environ, start_response)
             else:
+                logger.debug('Unauthenticated request for %s', path)
                 start_response(build_status(403), [('Content-Length', '0')])
             return [b'']
         else:
@@ -107,12 +125,14 @@ class Cryptor:
                 out = self.app(environ, Starter(deco, start_response)
                                .start_response)
             except fernet.InvalidToken:
+                logger.warning('Invalid encrypted token')
                 start_response(build_status(400), [])
                 return [b'Invalid encoding']
             return (deco.encrypt(data) + b'\r\n' for data in out)
 
 
 class Writer:
+    """Wraps a stream and encode the output with the given Fernet."""
     def __init__(self, stream, encoder: fernet.Fernet):
         self.stream = stream
         self.encoder = encoder
@@ -122,6 +142,11 @@ class Writer:
 
 
 class Starter:
+    """Auxiliary class to provide start_response callables.
+
+    It wraps an original start_response by removing any Content-Length
+    header and returning an encoding writer
+    """
     def __init__(self, encoder: fernet.Fernet, start_response):
         self.encoder = encoder
         self.start_parent = start_response
