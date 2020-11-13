@@ -20,7 +20,7 @@ name, the public part of the transient key and the signature using their
 private key of the string `user_name`+`transient_public_key` to prove their
 identity. The key and the signature are URS safe base64 encoded. The
 application verifies the signature and if it is valid generates a second
-transient x448 key that will be used to generate a symetric key with the
+transient x448 key that will be used to generate a symmetric key with the
 Diffie-Helmann algorithm. It then returns 2 lines in the response, the
 former containing the bytes of its transient public key, and the latter
 its signature (using the long term application private key), both lines
@@ -62,7 +62,7 @@ The `tools` package contains two scripts to easily generate the ed448
 keys and register the users in a SQLite3 database:
 
 - `build_key_pair` generates 2 files in PEM format one for the public
-key and one for the private one, the latter being optionaly encrypted
+key and one for the private one, the latter being optionally encrypted
 (should be encrypted for a user key, unencrypted for the server one).
 - `add_user` adds a user and its public key when given a user name and
 a path to a PEM file containing the public key

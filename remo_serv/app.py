@@ -17,7 +17,7 @@ from cryptography import fernet
 
 from . import user_service, __version__
 from .crypter import Cryptor
-from .http_tools import build_status
+from remo_tools.http_tools import build_status
 from .session_manager import SessionContainer
 
 init_ok = False

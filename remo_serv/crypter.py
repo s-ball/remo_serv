@@ -13,7 +13,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed448, x448
 from cryptography.hazmat.primitives.kdf.concatkdf import ConcatKDFHash
 
-from .http_tools import build_status, Codec
+from remo_tools.http_tools import build_status, Codec
 
 logger = logging.getLogger(__name__)
 

@@ -76,6 +76,6 @@ if __name__ == '__main__':
         version=get_version(),
         long_description=get_long_desc(),
         long_description_content_type='text/markdown',
-        packages = ['client', 'tools'],
+        packages = ['client', 'remo_tools'],
         name='client',
     )

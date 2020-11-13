@@ -11,7 +11,20 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ed448, x448
 from cryptography.hazmat.primitives.kdf import concatkdf
 
-from remo_serv.http_tools import Codec
+
+def import_codec():
+    import sys
+    from os.path import dirname
+
+    def do_import():
+        from remo_tools.http_tools import Codec
+        return Codec
+
+    sys.path.append(dirname(dirname(__file__)))
+    return do_import()
+
+
+Codec = import_codec()
 
 
 class Response(io.BufferedReader):

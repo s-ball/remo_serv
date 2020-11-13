@@ -5,7 +5,7 @@ from unittest import TestCase
 import io
 from cryptography import fernet
 
-from remo_serv import http_tools as tools
+from remo_tools import http_tools as tools
 
 
 class TestTools(TestCase):
