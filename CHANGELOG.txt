@@ -1,0 +1,3 @@
+0.4.0: Implement interactive commands on Windows servers
+
+0.3.0: First tagged version
