@@ -22,10 +22,11 @@ def parse2(arg):
     return args
 
 class CmdLoop(cmd.Cmd):
-    def __init__(self, con: Connection, server):
+    def __init__(self, con: Connection, server, encoding):
         self.con = con
         self.prompt = server + '> '
         super().__init__()
+        self.encoding = encoding
 
     def do_get(self, arg):
         'Get a file from remote: get remote_file [local_file]'
@@ -53,7 +54,7 @@ class CmdLoop(cmd.Cmd):
         'Execute a command on the remote and print the result: exec cmd param'
         try:
             r = self.con.exec(arg)
-            print(r.read().decode())
+            print(r.read().decode(self.encoding))
         except HTTPError as e:
             print(e)
 
@@ -61,7 +62,7 @@ class CmdLoop(cmd.Cmd):
         'Execute an interactive command'
         try:
             r = self.con.iexec(arg)
-            print(r.read().decode())
+            print(r.read().decode(self.encoding))
         except HTTPError as e:
             print(e)
 
@@ -69,7 +70,7 @@ class CmdLoop(cmd.Cmd):
         'Send input to the interactive command: idata data...'
         try:
             r = self.con.idata(arg)
-            print(r.read().decode())
+            print(r.read().decode(self.encoding))
         except HTTPError as e:
             print(e)
 
@@ -77,7 +78,7 @@ class CmdLoop(cmd.Cmd):
         'Close the input channel of the interactive command'
         try:
             r = self.con.end_cmd()
-            print(r.read().decode())
+            print(r.read().decode(self.encoding))
         except HTTPError as e:
             print(e)
 
@@ -88,6 +89,10 @@ class CmdLoop(cmd.Cmd):
     def do_quit(self, _arg):
         'Quit the program'
         return True
+
+    def do_set_encoding(self, arg):
+        'Set the server encoding'
+        self.encoding = arg
 
 
 def parse(args):
@@ -101,6 +106,8 @@ def parse(args):
                         help='user name')
     parser.add_argument('--key', '-k', help='File name of user key'
                         ' (PEM format). Default: user_key.pem')
+    parser.add_argument('--encoding', '-e',
+                        help='encoding of the server')
     params = parser.parse_args(args)
     if params.key is None:
         params.key = params.user + '_key.pem'
@@ -119,7 +126,7 @@ def run(args):
         server += ':' + str(params.port)
 
     con = login(server, '/auth', 'foo', own_key, remo_pub)
-    cmd_loop = CmdLoop(con, server)
+    cmd_loop = CmdLoop(con, server, params.encoding)
     cmd_loop.cmdloop()
 
 if __name__ == '__main__':

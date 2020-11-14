@@ -183,7 +183,8 @@ class MyTestCase(TestCase):
         start_response.assert_called_once()
         self.assertTrue(start_response.call_args[0][0].startswith('200'))
         self.assertEqual(out, [b'ab'])
-        self.assertEqual((proc, m), self.environ['SESSION']['__PROCESS__'])
+        p = self.environ['SESSION']['__PROCESS__']
+        self.assertEqual((proc, m), (p.process, p.m))
 
     def test_idt(self):
         self.test_icmd()
@@ -193,7 +194,7 @@ class MyTestCase(TestCase):
         self.environ['wsgi.input'].read = Mock(return_value=b'')
         start_response = Mock()
         with patch('select.select') as sel:
-            m = self.environ['SESSION']['__PROCESS__'][1]
+            m = self.environ['SESSION']['__PROCESS__'].m
             sel.side_effect = (([m], [], []), ([m], [], []))
             out = list(application(self.environ, start_response))
         start_response.assert_called_once()
@@ -210,7 +211,7 @@ class MyTestCase(TestCase):
         self.environ['wsgi.input'].read = Mock(return_value=b'')
         start_response = Mock()
         with patch('select.select') as sel:
-            m = self.environ['SESSION']['__PROCESS__'][1]
+            m = self.environ['SESSION']['__PROCESS__'].m
             sel.side_effect = (([m], [], []), ([m], [], []))
             out = list(application(self.environ, start_response))
         start_response.assert_called_once()
@@ -226,7 +227,7 @@ class MyTestCase(TestCase):
         self.environ['wsgi.input'].read = Mock(return_value=b'')
         start_response = Mock()
         with patch('select.select') as sel:
-            m = self.environ['SESSION']['__PROCESS__'][1]
+            m = self.environ['SESSION']['__PROCESS__'].m
             sel.side_effect = (([m], [], []), ([m], [], []))
             out = list(application(self.environ, start_response))
         start_response.assert_called_once()
@@ -240,11 +241,31 @@ class MyTestCase(TestCase):
         self.environ['PATH_INFO'] = '/icm/' + codec.encrypt('do something'.encode()).decode()
         self.environ['wsgi.input'] = Mock()
         start_response = Mock()
-        with patch('select.select') as sel, \
+        with patch('subprocess.Popen') as run, \
+                patch('non_blocking_io_wrapper.NonBlockingReader') as nb, \
                 DelAttr('socket', 'AF_UNIX'):
+
+            def tempo_data():
+                data = [(0, b'ab'), (.2, b'cd'), (0, b'')]
+                it = iter(data)
+
+                def f(*_args):
+                    timeout, val = next(it)
+                    time.sleep(timeout)
+                    return val
+
+                return f
+            proc = Mock()
+            m = Mock()
+            m.read = Mock(side_effect=tempo_data())
+            run.return_value = proc
+            nb.return_value = m
+            m.select = Mock(side_effect=(True, False, True))
             out = list(application(self.environ, start_response))
-            sel.assert_not_called()
+            self.assertEqual(['do', 'something'], list(run.call_args[0][0]))
         start_response.assert_called_once()
-        self.assertTrue(start_response.call_args[0][0].startswith('404'))
-        self.assertEqual(out, [b''])
-        self.assertFalse('__PROCESS__' in self.environ['SESSION'])
+        self.assertTrue(start_response.call_args[0][0].startswith('200'))
+        self.assertEqual(out, [b'ab'])
+        p = self.environ['SESSION']['__PROCESS__']
+        self.assertEqual(proc, p.process)
+        self.assertEqual(m, p.fd)

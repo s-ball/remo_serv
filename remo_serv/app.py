@@ -9,9 +9,8 @@ import logging.config
 import os.path
 import select
 import shlex
-import socket
-import subprocess
 import sys
+import subprocess
 
 from cryptography import fernet
 
@@ -19,6 +18,7 @@ from . import user_service, __version__
 from .crypter import Cryptor
 from remo_tools.http_tools import build_status
 from .session_manager import SessionContainer
+from .iprocess import build_process
 
 init_ok = False
 
@@ -60,12 +60,12 @@ def remo_application(environ, start_response):
     status = 404
     path = environ.get('PATH_INFO', '/')
     try:
-        p, m = environ['SESSION']['__PROCESS__']
+        p = environ['SESSION']['__PROCESS__']
         if path not in ('/idt', '/edt'):
             logger.debug('Interactive command closed by %s', path[:4])
-            m.close()
+            p.close()
             if not p.poll():
-                p.terminate()
+                p.terminate(5)
             del environ['SESSION']['__PROCESS__']
     except (LookupError, TypeError, AttributeError):
         pass
@@ -74,6 +74,7 @@ def remo_application(environ, start_response):
             filename = fernet.Fernet(environ['SESSION'].key).decrypt(
                 path[5:].encode()).decode()
             logger.debug(f"get {filename}")
+
             def chunk(file):
                 with open(file, 'rb') as cfd:
                     while True:
@@ -149,17 +150,12 @@ def remo_application(environ, start_response):
             logger.warning('Error icmd', exc_info=sys.exc_info())
         if status != 403:
             try:
-                m, s = socket.socketpair(socket.AF_UNIX)
                 data = environ['wsgi.input'].read()
                 # noinspection PyTypeChecker
-                p = subprocess.Popen(shlex.split(cmd),
-                                     bufsize=0,
-                                     stdin=s,
-                                     stdout=s,
-                                     stderr=s)
-                m.send(data)
-                if [m] == select.select([m], [], [], .1)[0]:
-                    data = m.recv(8192)
+                p = build_process(*(shlex.split(cmd)))
+                p.write(data)
+                if p.select(.1):
+                    data = p.read(8192)
                     if data == b'':
                         p = None
                 else:
@@ -167,7 +163,7 @@ def remo_application(environ, start_response):
                 out = [data]
                 status = 200
                 if p is not None:
-                    environ['SESSION']['__PROCESS__'] = (p, m)
+                    environ['SESSION']['__PROCESS__'] = p
             except AttributeError:
                 status = 404
             except RuntimeError as e:
@@ -175,7 +171,7 @@ def remo_application(environ, start_response):
                 logger.warning('Internal error icmd %s', cmd, exc_info=sys.exc_info())
     elif path == '/idt':
         try:
-            p, m = environ['SESSION']['__PROCESS__']
+            p = environ['SESSION']['__PROCESS__']
         except (LookupError, TypeError):
             status = 400
             logger.warning('No running icmd')
@@ -183,10 +179,9 @@ def remo_application(environ, start_response):
             try:
                 data = environ['wsgi.input'].read()
                 if len(data) > 0:
-                    m.send(data)
-                sel = select.select([m], [], [], .1)
-                if [m] == sel[0]:
-                    data = m.recv(8192)
+                    p.write(data)
+                if p.select(.1):
+                    data = p.read(8192)
                     if data == b'':
                         p = None
                 else:
@@ -201,22 +196,22 @@ def remo_application(environ, start_response):
             pass
     elif path == '/edt':
         try:
-            p, m = environ['SESSION']['__PROCESS__']
+            p = environ['SESSION']['__PROCESS__']
         except (LookupError, TypeError):
             status = 400
             logger.warning('No running icmd')
         if status != 400:
             try:
-                m.shutdown(socket.SHUT_WR)
+                p.shutdown()
 
-                def chunk_sock(s):
+                def chunk_stream(s):
                     while True:
-                        d = s.recv(8192)
+                        d = s.read(8192)
                         if len(d) == 0:
                             break
                         yield d
 
-                out = chunk_sock(m)
+                out = chunk_stream(p)
 
                 status = 200
                 del environ['SESSION']['__PROCESS__']

@@ -48,8 +48,8 @@ output (both stdout and stderr) using subprocess.run
 way: the command is executed using subprocess.Popen and left running
 to be later feed with `idt` and/or `edt` commands. The optional body
 if send to stdin and immediately available output is returned in the
-response. It currently uses an AF_UNIX socketpair and can only run in
-Posix systems (returns 404 on Windows)
+response. It currently uses an AF_UNIX socketpair on Posix systems or a
+`non_blocking_io_wrapper.NonBlockingReader` on Windows.
 - `/idt` feeds the request body to the running interactive command and
 returns the available output
 - `/edt` same as `idt` but shutdowns the input of the interactive command

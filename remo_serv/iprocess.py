@@ -48,13 +48,14 @@ def build_process(*cmd) -> IProcess:
 class SocketPairIProcess(IProcess):
     # noinspection PyTypeChecker
     def __init__(self, cmd: Sequence[str]):
-        s, self.m = socket.socketpair(socket.AF_UNIX)
+        self.m, s = socket.socketpair(socket.AF_UNIX)
         self.process = subprocess.Popen(cmd, bufsize=0, stdin=s, stdout=s,
                                         stderr=s)
         self.closed = False
 
     def select(self, timeout: float = None) -> bool:
-        return [[self.m], [], []] == select.select([self.m], [], [], timeout)
+        x = select.select([self.m], [], [], timeout)
+        return ([self.m], [], []) == x
 
     def read(self, hint: int = -1) -> bytes:
         if hint <= 0:
