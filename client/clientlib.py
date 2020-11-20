@@ -6,10 +6,14 @@ import json
 import urllib.request
 import http.client
 
+from typing import Optional
+
 from cryptography import fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ed448, x448
 from cryptography.hazmat.primitives.kdf import concatkdf
+
+from client import smartcard
 
 
 def import_codec():
@@ -112,7 +116,7 @@ class Connection:
         r = self.opener.open(self.app_url + cmd.decode())
         return r
 
-    def idata(self, data: bytes) -> http.client.HTTPResponse:
+    def idata(self, data: str) -> http.client.HTTPResponse:
         cmd = b'/idt'
         r = self.opener.open(self.app_url + cmd.decode(),
                              data.encode() + b'\n')
@@ -124,7 +128,9 @@ class Connection:
         return r
 
 
-def login(url: str, path: str, user: str, key: ed448.Ed448PrivateKey,
+def login(url: str, path: str, user: str,
+          key: Optional[ed448.Ed448PrivateKey],
+          signer: Optional[smartcard.Signer],
           remo_pub: ed448.Ed448PublicKey):
     cookie_processor = urllib.request.HTTPCookieProcessor()
     opener = urllib.request.build_opener(cookie_processor)
@@ -132,7 +138,8 @@ def login(url: str, path: str, user: str, key: ed448.Ed448PrivateKey,
     # noinspection PyTypeChecker
     pub = tmp_key.public_key().public_bytes(serialization.Encoding.Raw,
                                             serialization.PublicFormat.Raw)
-    sign = key.sign(user.encode() + pub)
+    data = user.encode() + pub
+    sign = key.sign(data) if signer is None else signer.sign(data)
     data = json.dumps({'user': user,
                        'key': base64.urlsafe_b64encode(pub).decode(),
                        'sign': base64.urlsafe_b64encode(sign).decode()

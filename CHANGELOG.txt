@@ -1,3 +1,6 @@
+0.5.0: Allow smart card usage for client authentication.
+       Accept RSA keys from smart cards
+
 0.4.0: Implement interactive commands on Windows servers
 
 0.3.0: First tagged version

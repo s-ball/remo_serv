@@ -11,6 +11,7 @@ from urllib.error import HTTPError
 from cryptography.hazmat.primitives import serialization
 
 from client.clientlib import login, Connection
+from client import smartcard
 
 
 def parse2(arg):
@@ -21,6 +22,7 @@ def parse2(arg):
         return None, None
     return args
 
+
 class CmdLoop(cmd.Cmd):
     def __init__(self, con: Connection, server, encoding):
         self.con = con
@@ -29,7 +31,7 @@ class CmdLoop(cmd.Cmd):
         self.encoding = encoding
 
     def do_get(self, arg):
-        'Get a file from remote: get remote_file [local_file]'
+        """Get a file from remote: get remote_file [local_file]"""
         params = parse2(arg)
         if params[0] is None:
             print('ERROR: 1 or 2 parameters required', file=sys.stderr)
@@ -40,7 +42,7 @@ class CmdLoop(cmd.Cmd):
                 print(e)
 
     def do_put(self, arg):
-        'Send a file to remote: put remote_file [local_file]'
+        """Send a file to remote: put remote_file [local_file]"""
         params = parse2(arg)
         if params[0] is None:
             print('ERROR: 1 or 2 parameters required', file=sys.stderr)
@@ -51,7 +53,7 @@ class CmdLoop(cmd.Cmd):
                 print(e)
 
     def do_exec(self, arg):
-        'Execute a command on the remote and print the result: exec cmd param'
+        """Execute a command on the remote and print the result: exec cmd param"""
         try:
             r = self.con.exec(arg)
             print(r.read().decode(self.encoding))
@@ -59,7 +61,7 @@ class CmdLoop(cmd.Cmd):
             print(e)
 
     def do_iexec(self, arg):
-        'Execute an interactive command'
+        """Execute an interactive command"""
         try:
             r = self.con.iexec(arg)
             print(r.read().decode(self.encoding))
@@ -67,31 +69,34 @@ class CmdLoop(cmd.Cmd):
             print(e)
 
     def do_idata(self, arg):
-        'Send input to the interactive command: idata data...'
+        """Send input to the interactive command: idata data..."""
         try:
             r = self.con.idata(arg)
             print(r.read().decode(self.encoding))
         except HTTPError as e:
             print(e)
 
-    def do_iend(self, arg):
-        'Close the input channel of the interactive command'
+    def do_iend(self, _arg):
+        """Close the input channel of the interactive command"""
         try:
             r = self.con.end_cmd()
             print(r.read().decode(self.encoding))
         except HTTPError as e:
             print(e)
 
-    def do_EOF(self, _arg):
-        'Quit the program'
+    # noinspection PyPep8Naming
+    @staticmethod
+    def do_EOF(_arg):
+        """Quit the program"""
         return True
 
-    def do_quit(self, _arg):
-        'Quit the program'
+    @staticmethod
+    def do_quit(_arg):
+        """Quit the program"""
         return True
 
     def do_set_encoding(self, arg):
-        'Set the server encoding'
+        """Set the server encoding"""
         self.encoding = arg
 
 
@@ -105,8 +110,10 @@ def parse(args):
     parser.add_argument('--user', '-u', default=getpass.getuser(),
                         help='user name')
     parser.add_argument('--key', '-k', help='File name of user key'
-                        ' (PEM format). Default: user_key.pem')
-    parser.add_argument('--encoding', '-e',
+                                            ' (PEM format). Default: user_key.pem')
+    parser.add_argument('--label', '-l', help='Label of a certificate '
+                                              'private key on a smart card')
+    parser.add_argument('--encoding', '-e', default='utf_8',
                         help='encoding of the server')
     params = parser.parse_args(args)
     if params.key is None:
@@ -119,15 +126,21 @@ def run(args):
     params = parse(args)
     with open(params.server, 'rb') as fd:
         remo_pub = serialization.load_pem_public_key(fd.read())
-    with open(params.key, 'rb') as fd:
-        own_key = serialization.load_pem_private_key(fd.read(), b'foo')
+    if params.label is None:
+        with open(params.key, 'rb') as fd:
+            own_key = serialization.load_pem_private_key(fd.read(), b'foo')
+        signer = None
+    else:
+        own_key = None
+        signer = smartcard.get_token(params.label)
     server = 'http://' + params.host
     if params.port != 80:
         server += ':' + str(params.port)
 
-    con = login(server, '/auth', 'foo', own_key, remo_pub)
+    con = login(server, '/auth', params.user, own_key, signer, remo_pub)
     cmd_loop = CmdLoop(con, server, params.encoding)
     cmd_loop.cmdloop()
+
 
 if __name__ == '__main__':
     run(sys.argv[1:])
