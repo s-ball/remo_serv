@@ -17,47 +17,57 @@ class TestSqliteUserService(TestCase):
         self.user_service.add('foo')
         self.assertEqual(self.user_service.public_data('foo'),
                          self.user_service.private('foo').public_key()
-                         .public_bytes(serialization.Encoding.Raw,
-                                       serialization.PublicFormat.Raw))
+                         .public_bytes(serialization.Encoding.PEM,
+                                       serialization.PublicFormat.SubjectPublicKeyInfo))
 
     def test_private(self):
         key = ed448.Ed448PrivateKey.generate()
         self.user_service.add('foo', key=key)
         self.assertEqual(self.user_service.public_data('foo'),
                          self.user_service.private('foo').public_key()
-                         .public_bytes(serialization.Encoding.Raw,
-                                       serialization.PublicFormat.Raw))
+                         .public_bytes(serialization.Encoding.PEM,
+                                       serialization.PublicFormat.SubjectPublicKeyInfo))
 
         self.assertEqual(self.user_service.public_data('foo'),
                          key.public_key().public_bytes(
-                             serialization.Encoding.Raw,
-                             serialization.PublicFormat.Raw))
+                             serialization.Encoding.PEM,
+                             serialization.PublicFormat.SubjectPublicKeyInfo))
 
     def test_public(self):
         key = ed448.Ed448PrivateKey.generate()
-        self.user_service.add('foo', pub=key.public_key())
+        self.user_service.add('foo', pub=key.public_key().public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo))
         self.assertEqual(self.user_service.public_data('foo'),
                          key.public_key().public_bytes(
-                             serialization.Encoding.Raw,
-                             serialization.PublicFormat.Raw))
+                             serialization.Encoding.PEM,
+                             serialization.PublicFormat.SubjectPublicKeyInfo))
 
     def test_both_ok(self):
         key = ed448.Ed448PrivateKey.generate()
-        self.user_service.add('foo', key=key, pub=key.public_key())
+        self.user_service.add('foo', key=key, pub=key.public_key()
+                              .public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo))
         self.assertEqual(self.user_service.public_data('foo'),
                          self.user_service.private('foo').public_key()
-                         .public_bytes(serialization.Encoding.Raw,
-                                       serialization.PublicFormat.Raw))
+                         .public_bytes(serialization.Encoding.PEM,
+                                       serialization.PublicFormat
+                                       .SubjectPublicKeyInfo))
         self.assertEqual(self.user_service.public_data('foo'),
                          key.public_key()
-                         .public_bytes(serialization.Encoding.Raw,
-                                       serialization.PublicFormat.Raw))
+                         .public_bytes(serialization.Encoding.PEM,
+                                       serialization.PublicFormat
+                                       .SubjectPublicKeyInfo))
 
     def test_both_ko(self):
         key = ed448.Ed448PrivateKey.generate()
         key2 = ed448.Ed448PrivateKey.generate()
         with self.assertRaises(ValueError):
-            self.user_service.add('foo', key=key, pub=key2.public_key())
+            self.user_service.add('foo', key=key, pub=key2.public_key()
+                                  .public_bytes(serialization.Encoding.PEM,
+                                                serialization.PublicFormat
+                                                .SubjectPublicKeyInfo))
 
     def test_not_found(self):
         self.user_service.add('foo')

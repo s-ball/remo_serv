@@ -24,8 +24,7 @@ def add(base: str, user: str, pem: str):
     if pem is None:
         pem = user + '.pem'
     with open(pem, 'rb') as fd:
-        # noinspection PyArgumentList
-        key = serialization.load_pem_public_key(fd.read())
+        key = fd.read()
     users.add(user, pub=key)
 
 

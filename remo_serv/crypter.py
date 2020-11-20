@@ -10,7 +10,7 @@ import logging
 from cryptography import fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ed448, x448
+from cryptography.hazmat.primitives.asymmetric import ed448, x448, padding
 from cryptography.hazmat.primitives.kdf.concatkdf import ConcatKDFHash
 
 from remo_tools.http_tools import build_status, Codec
@@ -75,8 +75,12 @@ class Cryptor:
                 return [b'']
             try:
                 user_bytes = self.user_service.public_data(user)
-                user_key = ed448.Ed448PublicKey.from_public_bytes(user_bytes)
-                user_key.verify(sign, user.encode() + pub)
+                user_key = serialization.load_pem_public_key(user_bytes)
+                if isinstance(user_key, ed448.Ed448PublicKey):
+                    user_key.verify(sign, user.encode() + pub)
+                else:
+                    user_key.verify(sign, user.encode() + pub,
+                                    padding.PKCS1v15(), hashes.SHA512())
             except (LookupError, TypeError, ValueError):
                 logger.warning('Error login %s', user, exc_info=sys.exc_info())
                 start_response(build_status(403), [('Content-Length', '0')])
