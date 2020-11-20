@@ -173,3 +173,36 @@ class TestCryptor(TestCase):
         self.crypt(self.environ, start_response)
         self.assertEqual(http_tools.build_status(400),
                          start_response.call_args[0][0])
+
+    def test_RSA_connect(self):
+        from cryptography.hazmat.primitives.asymmetric import rsa, padding
+
+        # noinspection PyArgumentList
+        private = rsa.generate_private_key(65537, 2048)
+        public = private.public_key()
+        user_service = Mock(UserService)
+        user_service.private.return_value = private
+        user_service.public_data.return_value = public.public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo)
+        con = Connection('foo', user_service)
+        self.environ['PATH_INFO'] = '/auth'
+        # noinspection PyArgumentList
+        sign = user_service.private('foo').sign(
+            b'foo' + con.pub, padding.PKCS1v15(), hashes.SHA512())
+        data = json.dumps({'user': 'foo',
+                           'key': base64.urlsafe_b64encode(con.pub).decode(),
+                           'sign': base64.urlsafe_b64encode(sign).decode(),
+                           })
+        self.environ['wsgi.input'] = io.BytesIO(data.encode())
+        start_response = Mock()
+        with patch.object(self.crypt, 'user_service', user_service):
+            out = self.crypt(self.environ, start_response)
+        start_response.assert_called_once()
+        self.assertTrue(start_response.call_args[0][0].startswith('200 '))
+        data = next(iter(out))
+        remo_pub_bytes = base64.urlsafe_b64decode(data)
+        remo_pub = x448.X448PublicKey.from_public_bytes(remo_pub_bytes)
+        tempo = con.private.exchange(remo_pub)
+        key = base64.urlsafe_b64encode(self.kdf.derive(tempo))
+        self.assertEqual(self.environ['SESSION'].key, key)
