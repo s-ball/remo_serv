@@ -60,7 +60,7 @@ class SessionContainer:
         """Constructor parameters:
         - app: the wrapped WSGI application
         - timeout: maximum session duration (in seconds) default 600
-        - delay: step in seconds between calls to the expirer thread
+        - delay: step in seconds between calls to the expire thread
         """
         self.app = app
         self.sessions = {}
@@ -100,7 +100,7 @@ class SessionContainer:
             return session
 
     def _do_expire(self, delta):
-        """The expirer thread method."""
+        """The expire thread method."""
         while True:
             with self.lock:
                 now = time.time()

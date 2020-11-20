@@ -11,17 +11,19 @@ and signed command to the server and execute them.
 The application is based on the [cryptography](https://github.com/pyca/cryptography) package.
 
 The application has a private ed448 key, and any user should know the
-associated public key. Reciprocally, every user has a private ed448 key
+associated public key. Reciprocally, every user has a private key
 and its associated counterpart must be registered in the application.
+Currently the user key can be either an ed448 or RSA one. The latter is
+intended to allow smart card certificate usage for user authentication.
 
 At login time, a user has to generate a one time x448 private key. They
 then send to the application (at `/auth`) a Json string containing their
 name, the public part of the transient key and the signature using their
 private key of the string `user_name`+`transient_public_key` to prove their
-identity. The key and the signature are URS safe base64 encoded. The
+identity. The key and the signature are URL safe base64 encoded. The
 application verifies the signature and if it is valid generates a second
 transient x448 key that will be used to generate a symmetric key with the
-Diffie-Helmann algorithm. It then returns 2 lines in the response, the
+Diffie-Hellman algorithm. It then returns 2 lines in the response, the
 former containing the bytes of its transient public key, and the latter
 its signature (using the long term application private key), both lines
 being URL safe base64 encoded.

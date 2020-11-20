@@ -18,6 +18,7 @@ from remo_tools.http_tools import build_status, Codec
 logger = logging.getLogger(__name__)
 
 
+# noinspection SpellCheckingInspection
 class Cryptor:
     """WSGI middleware handling en/de-cryption of request and response bodies.
 
@@ -75,6 +76,7 @@ class Cryptor:
                 return [b'']
             try:
                 user_bytes = self.user_service.public_data(user)
+                # noinspection PyArgumentList
                 user_key = serialization.load_pem_public_key(user_bytes)
                 if isinstance(user_key, ed448.Ed448PublicKey):
                     user_key.verify(sign, user.encode() + pub)

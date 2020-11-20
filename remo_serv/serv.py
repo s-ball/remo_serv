@@ -5,7 +5,9 @@
 It is intended to be a frontend in development mode, but can be used
 anywhere cherrypy.cheroot is suitable.
 
-usage: serv.py [-h] [--conf CONF] [--port PORT] [--interface INTERFACE] [--user-service USER_SERVICE] [--key-file KEY_FILE] [--log LOG] [--session SESSION] [--debug]
+usage: serv.py [-h] [--conf CONF] [--port PORT] [--interface INTERFACE]
+               [--user-service USER_SERVICE] [--key-file KEY_FILE]
+               [--log LOG] [--session SESSION] [--debug]
 
 optional arguments:
   -h, --help            show this help message and exit

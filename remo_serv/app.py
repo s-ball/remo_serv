@@ -7,18 +7,17 @@ It can only be used in a single process WSGI server
 
 import logging.config
 import os.path
-import select
 import shlex
-import sys
 import subprocess
+import sys
 
 from cryptography import fernet
 
+from remo_tools.http_tools import build_status
 from . import user_service, __version__
 from .crypter import Cryptor
-from remo_tools.http_tools import build_status
-from .session_manager import SessionContainer
 from .iprocess import build_process
+from .session_manager import SessionContainer
 
 init_ok = False
 
@@ -166,7 +165,7 @@ def remo_application(environ, start_response):
                     environ['SESSION']['__PROCESS__'] = p
             except AttributeError:
                 status = 404
-            except RuntimeError as e:
+            except RuntimeError:
                 status = 500
                 logger.warning('Internal error icmd %s', cmd, exc_info=sys.exc_info())
     elif path == '/idt':
