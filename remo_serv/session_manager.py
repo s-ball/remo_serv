@@ -36,6 +36,14 @@ class Session(collections.abc.MutableMapping):
         """Resets the session timestamp to the current time."""
         self.timestamp = time.time()
 
+    def invalidate(self):
+        """Invalidates a session.
+        Current version sets the timestamp to 0 and the key to None to
+        prevent further usage.
+        """
+        self.timestamp = 0
+        self.key = None
+
     def __getitem__(self, item):
         return self.content[item]
 
