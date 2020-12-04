@@ -59,8 +59,7 @@ class Codec(io.RawIOBase):
         if self.ended:
             raise fernet.InvalidToken()
         data = self.codec.decrypt(data, TTL)
-        req, tok = (struct.unpack('>h', data[i:i + 2])[0]
-                    for i in range(2, 6, 2))
+        req, tok = struct.unpack('>hh', data[2:6])
         if self.first:
             self.first = False
             if (time.time() < self.last_req + TTL and self.req_no != req) \

@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives import hashes
 
 import secrets
 import base64
+import struct
 
 from remo_serv import session_manager, crypter
 from remo_tools import http_tools
@@ -74,10 +75,13 @@ class TestCryptor(TestCase):
         start_response = Mock()
         session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
         msg = b'A B\nC'
+        hash_val = http_tools.do_hash(self.environ['PATH_INFO'].encode())
         coder = fernet.Fernet(session_key)
-        coded = coder.encrypt(msg)
+        coded = coder.encrypt(b'BE' + struct.pack('>hh', 5, 0)
+                              + hash_val + msg)
         self.environ['SESSION'].key = session_key
         self.environ['wsgi.input'] = io.BytesIO(coded)
+        self.environ['CONTENT_LENGTH'] = len(coded)
         resp = b'x yzt'
         resp = [resp, resp+resp]
         self.app.return_value = resp
@@ -87,9 +91,49 @@ class TestCryptor(TestCase):
         input_data = env['wsgi.input'].read()
         self.assertEqual(msg, input_data)
         i = -1
+        resp.append(b'')
         for i, data in enumerate(out):
-            self.assertEqual(resp[i], coder.decrypt(data, 10))
-        self.assertEqual(1, i)
+            data = coder.decrypt(data)
+            self.assertEqual(resp[i], data[6:])
+            req, tok = struct.unpack('>hh', data[2:6])
+            self.assertEqual(5, req)
+            self.assertEqual(i, tok)
+        self.assertEqual(2, i)
+
+    def test_authenticated_no_len(self):
+        start_response = Mock()
+        session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
+        msg = b'A B\nC'
+        hash_val = http_tools.do_hash(self.environ['PATH_INFO'].encode())
+        coder = fernet.Fernet(session_key)
+        coded = coder.encrypt(b'BE' + struct.pack('>hh', 5, 0)
+                              + hash_val + msg)
+        self.environ['SESSION'].key = session_key
+        self.environ['wsgi.input'] = io.BytesIO(coded)
+        resp = b'x yzt'
+        resp = [resp, resp+resp]
+        input_data = b''
+
+        def data_input(_x, _y):
+            nonlocal input_data
+
+            input_data = self.environ['wsgi.input'].read()
+            return resp
+
+        self.app.side_effect = data_input
+        out = self.crypt(self.environ, start_response)
+        self.app.assert_called_once()
+        env = self.app.call_args[0][0]
+        self.assertEqual(msg, input_data)
+        i = -1
+        resp.append(b'')
+        for i, data in enumerate(out):
+            data = coder.decrypt(data)
+            self.assertEqual(resp[i], data[6:])
+            req, tok = struct.unpack('>hh', data[2:6])
+            self.assertEqual(5, req)
+            self.assertEqual(i, tok)
+        self.assertEqual(2, i)
 
     def test_deco(self):
         self.environ['SESSION'].key = base64.urlsafe_b64encode(
@@ -127,7 +171,13 @@ class TestCryptor(TestCase):
     def test_content_length_0(self):
         session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
         self.environ['SESSION'].key = session_key
-        self.environ['CONTENT_LENGTH'] = 0
+        codec = fernet.Fernet(session_key)
+        hash_val = http_tools.do_hash(self.environ['PATH_INFO'].encode())
+        plain = b''
+        data = codec.encrypt(b'BE' + struct.pack('>hh', 5, 0) + hash_val
+                             + plain)
+        self.environ['CONTENT_LENGTH'] = len(data)
+        self.environ['wsgi.input'] = io.BytesIO(data)
         start_response = Mock()
         self.app.return_value = [b'']
         self.crypt(self.environ, start_response)
@@ -137,9 +187,10 @@ class TestCryptor(TestCase):
         session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
         self.environ['SESSION'].key = session_key
         codec = fernet.Fernet(session_key)
-        # noinspection SpellCheckingInspection
+        hash_val = http_tools.do_hash(self.environ['PATH_INFO'].encode())
         plain = b'abcdef'
-        data = codec.encrypt(plain)
+        data = codec.encrypt(b'BE' + struct.pack('>hh', 5, 0) + hash_val
+                             + plain)
         self.environ['CONTENT_LENGTH'] = len(data)
         self.environ['wsgi.input'] = io.BytesIO(data)
         start_response = Mock()
@@ -151,15 +202,32 @@ class TestCryptor(TestCase):
     def test_content_length_unknown(self):
         session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
         self.environ['SESSION'].key = session_key
-        codec = fernet.Fernet(session_key)
-        plains = [b'abc', b'def']
-        data = b''.join(codec.encrypt(x) + b'\r\n' for x in plains)
+        coder = fernet.Fernet(session_key)
+        hash_val = http_tools.do_hash(self.environ['PATH_INFO'].encode())
+        codec = http_tools.Codec(io.BytesIO(), coder, 5, 0, hash_val, False)
+        plains = [b'abc', b'def', b'']
+        data = b''.join(codec.transform(x) for x in plains)
         self.environ['wsgi.input'] = io.BytesIO(data)
         start_response = Mock()
         self.app.return_value = [b'']
         self.crypt(self.environ, start_response)
         self.assertEqual(b''.join(plains), self.environ['wsgi.input'].read())
         self.assertFalse('CONTENT_LENGTH' in self.environ)
+
+    def test_wrong_cmd_hash(self):
+        session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))
+        self.environ['SESSION'].key = session_key
+        coder = fernet.Fernet(session_key)
+        hash_val = http_tools.do_hash(self.environ['PATH_INFO'].encode() + b'x')
+        codec = http_tools.Codec(io.BytesIO(), coder, 5, 0, hash_val, False)
+        plains = [b'abc', b'def', b'']
+        data = b''.join(codec.transform(x) for x in plains)
+        self.environ['wsgi.input'] = io.BytesIO(data)
+        start_response = Mock()
+        self.app.return_value = [b'']
+        with self.assertRaises(fernet.InvalidToken):
+            self.crypt(self.environ, start_response)
+            self.environ['wsgi.input'].read()
 
     def test_data_error(self):
         session_key = base64.urlsafe_b64encode(secrets.token_bytes(32))

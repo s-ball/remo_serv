@@ -155,14 +155,18 @@ class Cryptor:
                     start_response(build_status(400), [])
                     return [b'Missing magic tokens']
                 data = deco.decrypt(data, TTL)
-                magic = data[2:]
-                req, tok = (struct.unpack('>h', data[i:i + 2])[0]
-                            for i in range(2, 6, 2))
-                path_hash = do_hash(path)
-                if tok != 0 or (time.time() < session['LAST_REQ'] + TTL * 2
-                                and req != session['REQ_NO'] + 1) \
-                        or data[6:6 + len(path_hash)] != do_hash(path) \
+                magic = data[:2]
+                req, tok = struct.unpack('>hh', data[2:6])
+                path_hash = do_hash(path.encode())
+                if tok != 0 or (time.time() < session.get('LAST_REQ', 0)
+                                + TTL * 2
+                                and req != session.get('REQ_NO', 0) + 1) \
+                        or data[6:6 + len(path_hash)] != path_hash \
                         or magic != b'BE':
+                    print(tok, time.time() < session.get('LAST_REQ', 0)
+                                + TTL * 2, req, session.get('REQ_NO', 0),
+                          req != session.get('REQ_NO', 0) + 1,
+                          data[6:6 + len(path_hash)], path_hash, magic)
                     logger.warning('Wrong initial token')
                     start_response(build_status(400), [])
                     session.invalidate()
@@ -170,10 +174,14 @@ class Cryptor:
                 data = data[6 + len(path_hash):]
                 environ['CONTENT_LENGTH'] = len(data)
                 environ['wsgi.input'] = io.BytesIO(data)
+                codec = None
+                session['REQ_NO'] = req
             else:
-                environ['wsgi.input'] = Codec(environ['wsgi.input'], deco,
-                                              do_hash(path),
-                                              allow_plain=False)
+                codec = Codec(environ['wsgi.input'], deco,
+                              session.get('REQ_NO', 0) + 1,
+                              session.get('LAST_REQ', 0),
+                              do_hash(path.encode()))
+                environ['wsgi.input'] = codec
             try:
                 out = self.app(environ, Starter(deco, start_response)
                                .start_response)
@@ -181,7 +189,11 @@ class Cryptor:
                 logger.warning('Invalid encrypted token')
                 start_response(build_status(400), [])
                 return [b'Invalid encoding']
-            return (deco.encrypt(data) + b'\r\n' for data in out)
+            if codec is not None:
+                session['REQ_NO'] = codec.req_no
+            session['LAST_REQ'] = time.time()
+            codec = Codec(io.BytesIO, deco, session['REQ_NO'], decode=False)
+            return (codec.transform(data) + b'\r\n' for data in out)
 
 
 class Writer:
