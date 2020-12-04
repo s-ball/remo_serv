@@ -47,6 +47,7 @@ class Codec(io.RawIOBase):
         self.cmd_hash = cmd_hash
         self.hash_len = len(cmd_hash)
         self.allow_plain = allow_plain
+        self.deco_ok = True
         if decode:
             self.transform = self.decrypt
             self.input = base.readline
@@ -118,6 +119,7 @@ class Codec(io.RawIOBase):
                     if not self.allow_plain:
                         raise
                     self.data = tmp
+                    self.deco_ok = False
                 self.start = 0
                 available = len(self.data)
             if available == 0:

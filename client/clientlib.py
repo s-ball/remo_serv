@@ -4,7 +4,10 @@ import collections
 import io
 import json
 import urllib.request
+import urllib.parse
 import http.client
+import time
+import struct
 
 from typing import Optional
 
@@ -13,31 +16,20 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ed448, x448
 from cryptography.hazmat.primitives.kdf import concatkdf
 
-from client import smartcard
-
-
-def import_codec():
-    import sys
-    from os.path import dirname
-
-    def do_import():
-        from remo_tools.http_tools import Codec
-        return Codec
-
-    sys.path.append(dirname(dirname(__file__)))
-    return do_import()
-
-
-Codec = import_codec()
+from . import smartcard
+from remo_tools.http_tools import Codec, do_hash
 
 
 class Response(io.BufferedReader):
-    def __init__(self, response, codec: fernet.Fernet):
-        decoder = Codec(response, codec)
-        super().__init__(decoder)
+    def __init__(self, response, codec: fernet.Fernet, req_no: int):
+        self.decoder = Codec(response, codec, req_no, time.time(), b'', allow_plain=True)
+        super().__init__(self.decoder)
         for k in vars(response).keys():
             setattr(self, k, getattr(response, k))
         self.response = response
+
+    def is_deco_ok(self):
+        return self.decoder.deco_ok
 
     def __getitem__(self, item):
         return self.response[item]
@@ -47,25 +39,37 @@ class Response(io.BufferedReader):
 
 
 class RemoServHandler(urllib.request.BaseHandler):
-    def __init__(self, codec: fernet.Fernet):
+    def __init__(self, codec: fernet.Fernet, base_path: str):
         self.codec = codec
+        self.req_no = 0
+        self.last_req = 0
+        self.base_path = base_path.rstrip('/')
 
     # noinspection PyTypeChecker
     def http_request(self, req: urllib.request.Request
                      ) -> urllib.request.Request:
+        self.req_no += 1
         data = req.data
+        path = req.selector
+        req.full_url = self.base_path + path
+        hash_val = do_hash(path.encode())
         if data is None:
-            return req
+            req.data = self.codec.encrypt(b'BE' + struct.pack(
+                '>hh', self.req_no, 0) + hash_val)
         elif hasattr(data, 'read'):
-            req.data = Codec(data, self.codec, False)
+            req.data = Codec(data, self.codec, self.req_no, 0, hash_val,
+                             False)
         else:
             try:
                 memoryview(data)
-                req.data = self.codec.encrypt(data)
+                req.data = self.codec.encrypt(b'BE' + struct.pack(
+                    '>hh', self.req_no, 0) + hash_val + data)
             except TypeError:
                 if isinstance(data, collections.abc.Iterable):
-                    req.data = (self.codec.encrypt(d) + '\r\n'
-                                for d in data)
+                    codec = Codec(io.BytesIO(), self.codec, self.req_no,
+                                  0, hash_val, False)
+                    req.data = b''.join(codec.transform(d) for d in data)\
+                               + codec.transform(b'')
                 else:
                     raise TypeError('RemoServHandler can only process '
                                     'bytes or iterables, got %r', type(data))
@@ -73,7 +77,7 @@ class RemoServHandler(urllib.request.BaseHandler):
 
     def http_response(self, _req, response):
         if 'Content-Length' not in response.headers:
-            return Response(response, self.codec)
+            return Response(response, self.codec, self.req_no)
         else:
             return response
 
@@ -81,11 +85,11 @@ class RemoServHandler(urllib.request.BaseHandler):
 # noinspection PyTypeChecker
 class Connection:
     def __init__(self, user: str, opener: urllib.request.OpenerDirector,
-                 codec: fernet.Fernet, app_url):
+                 codec: fernet.Fernet):
         self.user = user
         self.opener = opener
         self.codec = codec
-        self.app_url = app_url
+        self.app_url = 'http:'
 
     def get(self, remote_file: str, local_file: str = None):
         cmd = b'/get/' + self.codec.encrypt(remote_file.encode())
@@ -156,6 +160,7 @@ def login(url: str, path: str, user: str,
     session_key = base64.urlsafe_b64encode(session_key)
     session_codec = fernet.Fernet(session_key)
     return Connection(user,
-                      urllib.request.build_opener(RemoServHandler(session_codec),
-                                                  cookie_processor),
-                      session_codec, url)
+                      urllib.request.build_opener(
+                          RemoServHandler(session_codec, url),
+                          cookie_processor),
+                      session_codec)
