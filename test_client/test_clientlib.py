@@ -15,6 +15,12 @@ from client import clientlib
 from remo_tools import http_tools
 
 
+class ResponseStub(io.BytesIO):
+    def __init__(self, data: bytes, code):
+        super().__init__(data)
+        self.code = code
+
+
 class TestResponse(unittest.TestCase):
     def setUp(self) -> None:
         key = fernet.Fernet.generate_key()
@@ -22,21 +28,21 @@ class TestResponse(unittest.TestCase):
 
     def test_simple(self):
         req_no = 5
-        data = b'BE' + struct.pack('>hh', req_no, 0) + b'foo'
+        data = b'BE' + struct.pack('>hh', req_no, 0) + b'200foo'
         data = self.fernet.encrypt(data)
-        r = clientlib.Response(io.BytesIO(data), self.fernet, req_no)
+        r = clientlib.Response(ResponseStub(data, 200), self.fernet, req_no)
         self.assertEqual(b'foo', r.read())
         self.assertTrue(r.is_deco_ok())
 
     def test_no_encrypt(self):
-        r = clientlib.Response(io.BytesIO(b'foo'), self.fernet, 1)
+        r = clientlib.Response(ResponseStub(b'foo', 200), self.fernet, 1)
         self.assertEqual(b'foo', r.read())
 
     def test_wrong_req(self):
         req_no = 5
         data = b'BE' + struct.pack('>hh', req_no + 1, 0) + b'foo'
         data = self.fernet.encrypt(data)
-        r = clientlib.Response(io.BytesIO(data), self.fernet, req_no)
+        r = clientlib.Response(ResponseStub(data, 200), self.fernet, req_no)
         self.assertTrue(r.is_deco_ok())
         r.read()
         self.assertFalse(r.is_deco_ok())

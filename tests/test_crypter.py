@@ -94,7 +94,10 @@ class TestCryptor(TestCase):
         resp.append(b'')
         for i, data in enumerate(out):
             data = coder.decrypt(data)
-            self.assertEqual(resp[i], data[6:])
+            if i == 0:
+                self.assertEqual(b'200' + resp[i], data[6:])
+            else:
+                self.assertEqual(resp[i], data[6:])
             req, tok = struct.unpack('>hh', data[2:6])
             self.assertEqual(5, req)
             self.assertEqual(i, tok)
@@ -129,7 +132,10 @@ class TestCryptor(TestCase):
         resp.append(b'')
         for i, data in enumerate(out):
             data = coder.decrypt(data)
-            self.assertEqual(resp[i], data[6:])
+            if i == 0:
+                self.assertEqual(b'200' + resp[i], data[6:])
+            else:
+                self.assertEqual(resp[i], data[6:])
             req, tok = struct.unpack('>hh', data[2:6])
             self.assertEqual(5, req)
             self.assertEqual(i, tok)

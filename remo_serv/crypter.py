@@ -195,7 +195,7 @@ class Cryptor:
             if codec is not None:
                 session['REQ_NO'] = codec.req_no
             session['LAST_REQ'] = time.time()
-            codec = Codec(io.BytesIO(), deco, session['REQ_NO'], decode=False)
+            codec = Codec(io.BytesIO(), deco, session['REQ_NO'], cmd_hash=b'200', decode=False)
             return (codec.transform(data) + b'\r\n' for data in out)
 
 

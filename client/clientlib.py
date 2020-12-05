@@ -22,7 +22,9 @@ from remo_tools.http_tools import Codec, do_hash
 
 class Response(io.BufferedReader):
     def __init__(self, response, codec: fernet.Fernet, req_no: int):
-        self.decoder = Codec(response, codec, req_no, time.time(), b'', allow_plain=True)
+        self.decoder = Codec(response, codec, req_no, time.time(),
+                             '{:03d}'.format(response.code).encode(),
+                             allow_plain=True)
         super().__init__(self.decoder)
         for k in vars(response).keys():
             setattr(self, k, getattr(response, k))
@@ -77,7 +79,10 @@ class RemoServHandler(urllib.request.BaseHandler):
 
     def http_response(self, _req, response):
         if 'Content-Length' not in response.headers:
-            return Response(response, self.codec, self.req_no)
+            r = Response(response, self.codec, self.req_no)
+            if r.code == 200 and not r.is_deco_ok():
+                raise fernet.InvalidToken()
+            return r
         else:
             return response
 
