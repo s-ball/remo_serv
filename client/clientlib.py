@@ -89,7 +89,7 @@ class Connection:
         self.user = user
         self.opener = opener
         self.codec = codec
-        self.app_url = 'http:'
+        self.app_url = 'http://x'
 
     def get(self, remote_file: str, local_file: str = None):
         cmd = b'/get/' + self.codec.encrypt(remote_file.encode())

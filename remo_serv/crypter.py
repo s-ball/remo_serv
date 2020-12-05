@@ -143,7 +143,10 @@ class Cryptor:
             return [b'']
         else:
             deco = fernet.Fernet(session.key)
-            length = environ.get('CONTENT_LENGTH')
+            try:
+                length = int(environ.get('CONTENT_LENGTH'))
+            except (TypeError, ValueError):
+                length = None
             if length == 0:
                 logger.warning('Missing initial token')
                 start_response(build_status(400), [])
@@ -164,7 +167,7 @@ class Cryptor:
                         or data[6:6 + len(path_hash)] != path_hash \
                         or magic != b'BE':
                     print(tok, time.time() < session.get('LAST_REQ', 0)
-                                + TTL * 2, req, session.get('REQ_NO', 0),
+                          + TTL * 2, req, session.get('REQ_NO', 0),
                           req != session.get('REQ_NO', 0) + 1,
                           data[6:6 + len(path_hash)], path_hash, magic)
                     logger.warning('Wrong initial token')
@@ -192,7 +195,7 @@ class Cryptor:
             if codec is not None:
                 session['REQ_NO'] = codec.req_no
             session['LAST_REQ'] = time.time()
-            codec = Codec(io.BytesIO, deco, session['REQ_NO'], decode=False)
+            codec = Codec(io.BytesIO(), deco, session['REQ_NO'], decode=False)
             return (codec.transform(data) + b'\r\n' for data in out)
 
 
