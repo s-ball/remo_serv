@@ -34,6 +34,15 @@ used for following exchanges using the Fernet algorithm form the cryptography
 package: the request and responses bodies will contain one fernet token
 per line, the lines being delimited with `\r\n`.
 
+In order to be resistant to Man In The Middle attacks trying to alter
+content, requests are numbered
+in increasing order. That number can  be reset if the delay between two
+request is greater than twice the TTL of the Fernet tokens. Responses shall
+carry the number of their request, and all tokens in a request or
+response are numbered. Those two numbers are then included in all the fernet
+tokens. To protect the HTTP elements, the first fernet token contain a hash of the query
+text for a request, and the code for a response.
+
 ### Command execution
 
 The application will accept the following commands:

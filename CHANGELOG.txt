@@ -1,3 +1,6 @@
+0.6.0: Requests, responses and token are numbered.
+       This protects from MITM attacks, but is a breaking change.
+
 0.5.0: Allow smart card usage for client authentication.
        Accept RSA keys from smart cards
 
